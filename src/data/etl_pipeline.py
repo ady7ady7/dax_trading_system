@@ -771,7 +771,7 @@ def _calculate_atr_for_validation(df: pd.DataFrame, period: int) -> pd.Series:
         atr = true_range.rolling(window=period).mean()
         
         # Fill NaN values
-        atr.fillna(method='bfill', inplace=True)
+        atr.bfill(inplace=True)
         atr.fillna(true_range.mean(), inplace=True)
         
         return atr

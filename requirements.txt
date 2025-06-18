@@ -25,7 +25,7 @@ joblib>=1.5.1
 numba>=0.61.2
 
 # Technical Analysis
-TA-Lib>=0.6.4  # Note: May require manual installation
+#TA-Lib>=0.6.4  # Note: May require manual installation - commented out as it sucks and we can't install it properly
 pandas-ta>=0.3.14b
 
 # Configuration Management
