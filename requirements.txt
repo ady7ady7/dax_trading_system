@@ -44,3 +44,10 @@ pytest-cov>=4.1.0
 # Development
 black>=23.9.1
 flake8>=6.0.0
+
+# NEW: TradingView Automation Dependencies
+selenium>=4.15.0
+webdriver-manager>=4.0.1
+
+# File Format Support
+pyarrow>=15.0.0  # For efficient parquet files

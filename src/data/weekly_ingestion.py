@@ -1,16 +1,52 @@
-#!/usr/bin/env python3
-"""
-DAX Trading System - Weekly Data Ingestion from TradingView
 
+"""
 This module handles automated weekly data ingestion from TradingView CSV exports,
 including data validation, deduplication, and seamless integration with historical data.
 
 Dependencies:
     pip install tradingview-selenium helium selenium webdriver-manager
 
-Author: DAX Trading System
-Created: 2025-06-18
+    
 """
+
+'''Usage
+Option 1: Manual CSV Processing (Recommended for Start)
+
+Export data from TradingView manually:
+
+Open TradingView.com (requires Pro+ account)
+Navigate to DAX chart (XETR:DAX)
+Set timeframe to 1 minute
+Load historical data by scrolling left
+Click menu → "Export chart data..."
+Download the CSV file
+
+
+Process the CSV:
+python weekly_ingestion.py --csv path/to/your/tradingview_export.csv
+
+
+Option 2: Automated Download (Advanced)
+bash# Automated download and processing
+python weekly_ingestion.py --auto --username your_tv_username --days 7
+
+# You'll be prompted for password (for security)
+Option 3: Scheduled Automation
+Set up a cron job for automatic weekly updates:
+bash# View cron setup instructions
+python weekly_ingestion.py --setup-cron
+
+# Edit your crontab
+crontab -e
+
+# Add one of these lines:
+# Run every Monday at 6 AM
+0 6 * * 1 cd /path/to/dax-trading-system && python weekly_ingestion.py --auto --username YOUR_USERNAME
+
+# Run every Sunday at 11 PM  
+0 23 * * 0 cd /path/to/dax-trading-system && python weekly_ingestion.py --auto --username YOUR_USERNAME'''
+
+
 
 import logging
 import pandas as pd
