@@ -984,3 +984,38 @@ if __name__ == "__main__":
     )
     
     main()
+
+
+    '''Key Features of the Validation Framework:
+1. Comprehensive OHLC Relationship Validation
+
+High >= max(Open, Close, Low) validation
+Low <= min(Open, Close, High) validation
+Detailed violation reporting with timestamps and exact values
+
+2. Impossible Price Movement Detection
+
+ATR-normalized price changes for context-aware analysis
+5 standard deviation threshold for outlier detection
+Z-score analysis for additional validation
+Severity classification (high >10%, medium <10%)
+
+3. Volume Consistency Analysis
+
+Rolling percentile boundaries (5th and 95th percentiles)
+20-period window for dynamic thresholds
+Low and high volume anomaly detection
+Deviation ratio calculations for severity assessment
+
+4. Additional Quality Checks
+
+Missing data detection
+Negative/zero price validation
+Zero volume period identification
+Duplicate timestamp detection
+
+5. Data Quality Scoring System
+
+0-100 quality score with weighted penalties
+Severity-based recommendations
+Actionable improvement suggestions'''

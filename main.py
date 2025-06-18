@@ -265,7 +265,7 @@ def main() -> None:
         print("   ⏳ Signal Generation - Pending")
         print("   ⏳ Risk Management - Pending")
         print("   ⏳ Backtesting Engine - Pending")
-        print("\nNext: Implement feature engineering and technical indicators.")⏳ Feature Engineering - Pending")
+        print("\nNext: Implement feature engineering and technical indicators.⏳ Feature Engineering - Pending")
         print("   ⏳ Market Regime Detection - Pending") 
         print("   ⏳ Signal Generation - Pending")
         print("   ⏳ Risk Management - Pending")
