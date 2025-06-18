@@ -18,7 +18,14 @@ from dataclasses import dataclass
 import warnings
 
 # Import our gap detection module
-from .gap_detector import Gap, GapDetector
+try:
+    from .gap_detector import Gap, GapDetector
+except ImportError:
+    # For direct execution
+    import sys
+    from pathlib import Path
+    sys.path.append(str(Path(__file__).parent.parent.parent))
+    from src.data.gap_detector import Gap, GapDetector
 
 logger = logging.getLogger(__name__)
 
@@ -152,14 +159,25 @@ class DataImputer:
             prev_data = df.loc[prev_idx]
             next_data = df.loc[next_idx]
             
+            # For 1-minute gaps, use simpler approach to avoid division by zero
+            total_gap_duration = (gap.end_time - gap.start_time).total_seconds() / 60
+            
             # Generate imputed values for each timestamp in gap
-            for timestamp in gap_range:
-                # Open: Use previous Close
-                open_price = prev_data['Close']
-                
-                # Close: Linear interpolation between previous and next Close
-                weight = (timestamp - gap.start_time) / (gap.end_time - gap.start_time)
-                close_price = prev_data['Close'] * (1 - weight) + next_data['Close'] * weight
+            for i, timestamp in enumerate(gap_range):
+                # For single minute gaps or very short gaps
+                if total_gap_duration <= 1 or len(gap_range) <= 1:
+                    # Simple approach: use previous close as basis
+                    close_price = prev_data['Close']
+                    open_price = prev_data['Close']
+                else:
+                    # Linear interpolation weight
+                    weight = i / (len(gap_range) - 1)
+                    
+                    # Open: Use previous Close
+                    open_price = prev_data['Close']
+                    
+                    # Close: Linear interpolation between previous and next Close
+                    close_price = prev_data['Close'] * (1 - weight) + next_data['Close'] * weight
                 
                 # High: max of recent highs and current open/close
                 high_price = max(prev_data['High'], open_price, close_price)
@@ -232,8 +250,11 @@ class DataImputer:
             total_gap_duration = (gap.end_time - gap.start_time).total_seconds() / 60
             
             for i, timestamp in enumerate(gap_range):
-                # Time weight (0 at start, 1 at end)
-                weight = i / (len(gap_range) - 1) if len(gap_range) > 1 else 0.5
+                # Time weight (0 at start, 1 at end) - handle single point gaps
+                if len(gap_range) <= 1:
+                    weight = 0.5  # Middle interpolation for single point
+                else:
+                    weight = i / (len(gap_range) - 1)
                 
                 # Base interpolated close price
                 base_close = prev_close * (1 - weight) + next_close * weight
