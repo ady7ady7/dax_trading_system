@@ -1,6 +1,0 @@
-Collecting colorlog
-  Using cached colorlog-6.9.0-py3-none-any.whl.metadata (10 kB)
-Requirement already satisfied: colorama in c:\users\hardpc\desktop\al\projekty\dax_trading_system\venv\lib\site-packages (from colorlog) (0.4.6)
-Using cached colorlog-6.9.0-py3-none-any.whl (11 kB)
-Installing collected packages: colorlog
-Successfully installed colorlog-6.9.0
