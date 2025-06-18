@@ -24,6 +24,8 @@ cd scripts
 python weekly_ingestion.py --csv ../data/raw/export.csv
 python weekly_ingestion.py --auto'''
 
+### +++ SCHEDULE CRON JOBS OR SOMETHING SIMILAR
+
 import logging
 import pandas as pd
 import numpy as np
