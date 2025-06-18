@@ -5,7 +5,7 @@ Main execution entry point for the trading system.
 
 Author: [Your Name]
 Created: 2025
-Python Version: 3.9+
+Python Version: 3.12.2
 """
 
 import logging
@@ -23,6 +23,8 @@ import numpy as np
 
 # Local imports (will be implemented in subsequent modules)
 from src.data.data_ingestion import load_and_convert_data, DataIngestionError
+from src.data.gap_detector import GapDetector
+from src.data.etl_pipeline import impute_data, DataImputer
 # from src.data.validator import DataValidator
 # from src.features.engineering import FeatureEngineer
 # from src.models.regime import MarketRegimeDetector
@@ -135,6 +137,68 @@ def main() -> None:
                     print(f"   Columns: {list(df.columns)}")
                     print(f"   Date Range: {df.index.min()} to {df.index.max()}")
                     
+                    # Test Gap Detection
+                    logger.info("Testing gap detection...")
+                    gap_detector = GapDetector()
+                    
+                    # For large datasets, test on a sample first
+                    if len(df) > 100000:
+                        logger.info("Large dataset detected, testing gap detection on sample...")
+                        # Test on first week of data
+                        sample_df = df.head(7 * 24 * 60)  # ~1 week of 1-minute data
+                        gaps = gap_detector.detect_gaps(sample_df)
+                        test_df = sample_df
+                    else:
+                        gaps = gap_detector.detect_gaps(df)
+                        test_df = df
+                    
+                    # Get quality metrics
+                    quality_metrics = gap_detector.get_data_quality_metrics(test_df, gaps)
+                    
+                    print(f"\n📊 Data Quality Analysis:")
+                    print(f"   Data Completeness: {quality_metrics.get('data_completeness_pct', 'N/A')}%")
+                    print(f"   Total Gaps Found: {quality_metrics.get('total_gaps', 0)}")
+                    print(f"   Critical Data Gaps: {quality_metrics.get('critical_data_gaps', 0)}")
+                    print(f"   Missing Minutes: {quality_metrics.get('total_missing_minutes', 0):,}")
+                    
+                    if gaps:
+                        # Show sample gaps
+                        gaps_df = gap_detector.gaps_to_dataframe(gaps)
+                        print(f"\n🔍 Sample Detected Gaps:")
+                        print(gaps_df.head(3).to_string(index=False))
+                        if len(gaps) > 3:
+                            print(f"   ... and {len(gaps) - 3} more gaps")
+                        
+                        # Test data imputation on sample
+                        logger.info("Testing data imputation...")
+                        try:
+                            # Only test imputation on minor and moderate gaps for demo
+                            small_gaps = [g for g in gaps if g.severity in ['minor', 'moderate']][:5]  # Limit to 5 gaps for testing
+                            
+                            if small_gaps:
+                                imputation_result = impute_data(test_df.copy(), small_gaps)
+                                
+                                print(f"\n🔧 Data Imputation Test:")
+                                print(f"   Original rows: {len(test_df)}")
+                                print(f"   After imputation: {len(imputation_result.imputed_df)}")
+                                print(f"   Minor gaps imputed: {imputation_result.imputation_summary.get('minor_gaps_imputed', 0)}")
+                                print(f"   Moderate gaps imputed: {imputation_result.imputation_summary.get('moderate_gaps_imputed', 0)}")
+                                print(f"   Major gaps flagged: {imputation_result.imputation_summary.get('major_gaps_flagged', 0)}")
+                                print(f"   Total points imputed: {imputation_result.imputation_summary.get('total_points_imputed', 0)}")
+                                
+                                if imputation_result.quality_flags:
+                                    print(f"   Quality warnings: {len(imputation_result.quality_flags)}")
+                                    
+                            else:
+                                print(f"\n🔧 Data Imputation: No suitable gaps found for testing")
+                                
+                        except Exception as e:
+                            logger.error(f"Imputation test failed: {e}")
+                            print(f"\n❌ Imputation test failed: {e}")
+                    else:
+                        print(f"\n✨ Perfect Data Quality - No gaps detected!")
+                        print(f"🔧 Data Imputation: Not needed - perfect data continuity")
+                    
                 except DataIngestionError as e:
                     logger.error(f"Data ingestion failed: {e}")
                     print(f"\n❌ Data Ingestion Test Failed: {e}")
@@ -166,12 +230,14 @@ def main() -> None:
         # System is now ready with data ingestion capability
         print("\n🚀 System Status:")
         print("   ✅ Data Ingestion Module - Ready")
+        print("   ✅ Gap Detection Module - Ready")
+        print("   ✅ Data Imputation Module - Ready")
         print("   ⏳ Feature Engineering - Pending")
         print("   ⏳ Market Regime Detection - Pending") 
         print("   ⏳ Signal Generation - Pending")
         print("   ⏳ Risk Management - Pending")
         print("   ⏳ Backtesting Engine - Pending")
-        print("\nNext: Implement data validation and gap detection modules.")
+        print("\nNext: Implement feature engineering and technical indicators.")
         
         logger.info("Trading system execution completed")
         
