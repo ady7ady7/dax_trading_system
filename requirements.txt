@@ -48,6 +48,7 @@ flake8>=6.0.0
 # NEW: TradingView Automation Dependencies
 selenium>=4.15.0
 webdriver-manager>=4.0.1
+python-dotenv>=1.0.0  # For .env file support
 
 # File Format Support
 pyarrow>=15.0.0  # For efficient parquet files

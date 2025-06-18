@@ -1,52 +1,16 @@
-
+#!/usr/bin/env python3
 """
+DAX Trading System - Weekly Data Ingestion from TradingView
+
 This module handles automated weekly data ingestion from TradingView CSV exports,
 including data validation, deduplication, and seamless integration with historical data.
 
 Dependencies:
     pip install tradingview-selenium helium selenium webdriver-manager
 
-    
+Author: DAX Trading System
+Created: 2025-06-18
 """
-
-'''Usage
-Option 1: Manual CSV Processing (Recommended for Start)
-
-Export data from TradingView manually:
-
-Open TradingView.com (requires Pro+ account)
-Navigate to DAX chart (XETR:DAX)
-Set timeframe to 1 minute
-Load historical data by scrolling left
-Click menu → "Export chart data..."
-Download the CSV file
-
-
-Process the CSV:
-python weekly_ingestion.py --csv path/to/your/tradingview_export.csv
-
-
-Option 2: Automated Download (Advanced)
-bash# Automated download and processing
-python weekly_ingestion.py --auto --username your_tv_username --days 7
-
-# You'll be prompted for password (for security)
-Option 3: Scheduled Automation
-Set up a cron job for automatic weekly updates:
-bash# View cron setup instructions
-python weekly_ingestion.py --setup-cron
-
-# Edit your crontab
-crontab -e
-
-# Add one of these lines:
-# Run every Monday at 6 AM
-0 6 * * 1 cd /path/to/dax-trading-system && python weekly_ingestion.py --auto --username YOUR_USERNAME
-
-# Run every Sunday at 11 PM  
-0 23 * * 0 cd /path/to/dax-trading-system && python weekly_ingestion.py --auto --username YOUR_USERNAME'''
-
-
 
 import logging
 import pandas as pd
@@ -74,6 +38,17 @@ try:
 except ImportError:
     SELENIUM_AVAILABLE = False
     logging.warning("Selenium dependencies not available. TradingView automation disabled.")
+
+# For environment variable support
+try:
+    from dotenv import load_dotenv
+    load_dotenv()  # Load .env file if it exists
+    DOTENV_AVAILABLE = True
+except ImportError:
+    DOTENV_AVAILABLE = False
+    logging.info("python-dotenv not available. Install with 'pip install python-dotenv' for .env file support.")
+
+import os
 
 # Local imports
 sys.path.append(str(Path(__file__).parent.parent))
@@ -149,10 +124,10 @@ class TradingViewDataDownloader:
     
     def login(self, username: str, password: str) -> bool:
         """
-        Login to TradingView.
+        Login to TradingView using email or username.
         
         Args:
-            username (str): TradingView username
+            username (str): TradingView username or email address
             password (str): TradingView password
             
         Returns:
@@ -163,39 +138,126 @@ class TradingViewDataDownloader:
                 self.setup_driver()
                 
             logger.info("Navigating to TradingView login page...")
-            self.driver.get("https://www.tradingview.com/chart/")
+            self.driver.get("https://www.tradingview.com/accounts/signin/")
             
-            # Wait for and click sign in button
-            wait = WebDriverWait(self.driver, 10)
+            wait = WebDriverWait(self.driver, 15)
             
-            # Look for sign in button
-            sign_in_button = wait.until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "[data-name='header-user-menu-sign-in']"))
-            )
-            sign_in_button.click()
-            
-            # Enter credentials
+            # Wait for username/email field
             username_field = wait.until(
                 EC.presence_of_element_located((By.NAME, "username"))
             )
+            username_field.clear()
             username_field.send_keys(username)
             
-            password_field = self.driver.find_element(By.NAME, "password")
+            # Enter password
+            password_field = wait.until(
+                EC.presence_of_element_located((By.NAME, "password"))
+            )
+            password_field.clear()
             password_field.send_keys(password)
             
             # Submit form
-            submit_button = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+            submit_button = wait.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "button[type='submit']"))
+            )
             submit_button.click()
+            
+            # Wait for potential 2FA or CAPTCHA
+            time.sleep(3)
+            
+            # Check for 2FA prompt
+            try:
+                tfa_element = self.driver.find_element(By.CSS_SELECTOR, "[name='code'], [placeholder*='code'], [placeholder*='2FA']")
+                if tfa_element.is_displayed():
+                    logger.info("2FA code required")
+                    if not self.headless:
+                        code = input("Enter 2FA code: ")
+                        tfa_element.send_keys(code)
+                        submit_btn = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+                        submit_btn.click()
+                        time.sleep(3)
+                    else:
+                        logger.error("2FA required but running in headless mode")
+                        return False
+            except:
+                pass  # No 2FA required
+            
+            # Check for CAPTCHA
+            try:
+                captcha_elements = self.driver.find_elements(By.CSS_SELECTOR, "[class*='captcha'], [id*='captcha'], iframe[src*='captcha']")
+                if captcha_elements and any(elem.is_displayed() for elem in captcha_elements):
+                    if not self.headless:
+                        logger.info("CAPTCHA detected - please solve manually")
+                        input("Please solve CAPTCHA manually and press Enter to continue...")
+                    else:
+                        logger.error("CAPTCHA required but running in headless mode")
+                        return False
+            except:
+                pass  # No CAPTCHA
             
             # Wait for login to complete
             time.sleep(5)
             
-            # Check if login was successful
-            if "chart" in self.driver.current_url:
+            # Check multiple possible success indicators
+            success_indicators = [
+                "tradingview.com/chart",
+                "tradingview.com/u/",
+                "[data-name='header-user-menu']",
+                "[class*='js-header-user-menu']"
+            ]
+            
+            current_url = self.driver.current_url
+            login_successful = False
+            
+            # Check URL-based indicators
+            if any(indicator in current_url for indicator in success_indicators[:2]):
+                login_successful = True
+            
+            # Check DOM-based indicators
+            if not login_successful:
+                for selector in success_indicators[2:]:
+                    try:
+                        elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                        if elements and any(elem.is_displayed() for elem in elements):
+                            login_successful = True
+                            break
+                    except:
+                        continue
+            
+            if login_successful:
                 logger.info("Login successful")
                 return True
             else:
-                logger.error("Login failed")
+                # Check for error messages
+                error_selectors = [
+                    "[class*='error']", 
+                    "[class*='invalid']", 
+                    ".js-field-error",
+                    "[data-role='error']",
+                    ".error-message"
+                ]
+                
+                for selector in error_selectors:
+                    try:
+                        error_elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                        for elem in error_elements:
+                            if elem.is_displayed() and elem.text.strip():
+                                logger.error(f"Login failed with error: {elem.text}")
+                                return False
+                    except:
+                        continue
+                
+                logger.error("Login failed - no specific error found")
+                logger.info(f"Current URL: {current_url}")
+                
+                # Save screenshot for debugging if not headless
+                if not self.headless:
+                    try:
+                        self.driver.save_screenshot("login_debug.png")
+                        logger.info("Debug screenshot saved as login_debug.png")
+                    except:
+                        pass
+                
                 return False
                 
         except Exception as e:
@@ -277,6 +339,25 @@ class TradingViewDataDownloader:
         if self.driver:
             self.driver.quit()
             logger.info("Webdriver cleaned up")
+
+
+def get_credentials():
+    """
+    Get TradingView credentials from environment variables.
+    
+    Returns:
+        tuple: (username, password) or (None, None) if not found
+    """
+    username = os.getenv('TV_USERNAME')
+    password = os.getenv('TV_PASSWORD')
+    
+    if not username or not password:
+        logger.info("TradingView credentials not found in environment variables")
+        logger.info("Set TV_USERNAME and TV_PASSWORD environment variables or use .env file")
+        return None, None
+    
+    logger.info(f"Found credentials for user: {username[:3]}***@{username.split('@')[1] if '@' in username else '***'}")
+    return username, password
 
 
 class WeeklyDataIngestion:
@@ -736,13 +817,13 @@ class WeeklyDataIngestion:
             self.rollback_from_backup()
             return False
     
-    def automated_download_and_process(self, username: str, password: str, days_back: int = 7) -> bool:
+    def automated_download_and_process(self, username: str = None, password: str = None, days_back: int = 7) -> bool:
         """
         Automated download and processing of TradingView data.
         
         Args:
-            username (str): TradingView username
-            password (str): TradingView password
+            username (str): TradingView username/email (optional if set in environment)
+            password (str): TradingView password (optional if set in environment)
             days_back (int): Days of data to download
             
         Returns:
@@ -750,6 +831,21 @@ class WeeklyDataIngestion:
         """
         if not SELENIUM_AVAILABLE:
             logger.error("Selenium not available for automated download")
+            logger.error("Install with: pip install selenium webdriver-manager")
+            return False
+            
+        # Try to get credentials from environment if not provided
+        if not username or not password:
+            env_username, env_password = get_credentials()
+            username = username or env_username
+            password = password or env_password
+        
+        if not username or not password:
+            logger.error("No credentials provided!")
+            logger.error("Either:")
+            logger.error("  1. Set TV_USERNAME and TV_PASSWORD environment variables")
+            logger.error("  2. Create .env file with TV_USERNAME and TV_PASSWORD")
+            logger.error("  3. Pass --username and --password arguments")
             return False
             
         downloader = None
@@ -766,6 +862,7 @@ class WeeklyDataIngestion:
             
             if not downloader.login(username, password):
                 logger.error("TradingView login failed")
+                logger.error("Check your credentials and account status")
                 return False
             
             downloaded_file = downloader.download_dax_data(timeframe="1", days_back=days_back)
@@ -855,14 +952,32 @@ def main():
             
     elif args.auto:
         # Automated download and processing
-        username = args.username or input("TradingView Username: ")
-        password = args.password or input("TradingView Password: ")
+        username = args.username
+        password = args.password
+        
+        # If not provided via command line, try environment variables
+        if not username or not password:
+            env_username, env_password = get_credentials()
+            username = username or env_username
+            password = password or env_password
+        
+        # If still missing, prompt user
+        if not username:
+            username = input("TradingView Username/Email: ")
+        if not password:
+            import getpass
+            password = getpass.getpass("TradingView Password: ")
         
         success = ingestion.automated_download_and_process(username, password, args.days)
         if success:
             print("✅ Automated data ingestion completed successfully!")
         else:
             print("❌ Automated data ingestion failed!")
+            print("💡 Tips:")
+            print("   - Ensure you have TradingView Pro+ account")
+            print("   - Check your email/username and password")
+            print("   - Try manual CSV export first")
+            print("   - Disable 2FA temporarily or run in non-headless mode")
             sys.exit(1)
     else:
         # Show usage
