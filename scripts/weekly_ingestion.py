@@ -12,6 +12,18 @@ Author: DAX Trading System
 Created: 2025-06-18
 """
 
+#USAGE 
+'''# From project root (recommended)
+python scripts/weekly_ingestion.py --csv data/raw/export.csv
+python scripts/weekly_ingestion.py --auto
+python scripts/setup_credentials.py
+python scripts/test_password.py
+
+# Or from scripts directory
+cd scripts
+python weekly_ingestion.py --csv ../data/raw/export.csv
+python weekly_ingestion.py --auto'''
+
 import logging
 import pandas as pd
 import numpy as np
