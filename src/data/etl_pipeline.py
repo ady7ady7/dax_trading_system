@@ -16,6 +16,7 @@ import numpy as np
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 import warnings
+from scipy import stats
 
 # Import our gap detection module
 try:
@@ -28,6 +29,16 @@ except ImportError:
     from src.data.gap_detector import Gap, GapDetector
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ValidationResult:
+    """Results from comprehensive OHLCV data validation."""
+    total_records: int
+    validation_summary: Dict[str, int]
+    anomaly_details: Dict[str, List[Dict]]
+    data_quality_score: float
+    recommended_actions: List[str]
 
 
 @dataclass
@@ -362,8 +373,485 @@ class DataImputer:
             return [f"Validation error: {e}"]
 
 
-# Convenience function for direct use
-def impute_data(df: pd.DataFrame, gaps: List[Gap]) -> ImputationResult:
+def validate_ohlcv_data(
+    df: pd.DataFrame, 
+    atr_period: int = 14,
+    volume_window: int = 20,
+    price_change_threshold: float = 5.0,
+    volume_low_percentile: float = 5.0,
+    volume_high_percentile: float = 95.0
+) -> ValidationResult:
+    """
+    Comprehensive validation of OHLCV financial data.
+    
+    Performs multiple quality checks including OHLC relationships, price movement
+    anomalies, and volume consistency analysis.
+    
+    Args:
+        df (pd.DataFrame): OHLCV DataFrame with datetime index
+        atr_period (int): Period for ATR calculation (default: 14)
+        volume_window (int): Rolling window for volume percentiles (default: 20)
+        price_change_threshold (float): Standard deviation threshold for price movements (default: 5.0)
+        volume_low_percentile (float): Lower percentile for volume anomaly detection (default: 5.0)
+        volume_high_percentile (float): Upper percentile for volume anomaly detection (default: 95.0)
+        
+    Returns:
+        ValidationResult: Comprehensive validation results with anomaly details
+        
+    Example:
+        >>> result = validate_ohlcv_data(df)
+        >>> print(f"Data Quality Score: {result.data_quality_score:.2f}")
+        >>> print(f"OHLC Violations: {result.validation_summary['ohlc_violations']}")
+    """
+    logger.info(f"Starting comprehensive validation of {len(df)} OHLCV records")
+    
+    if df.empty:
+        logger.warning("Empty DataFrame provided for validation")
+        return ValidationResult(
+            total_records=0,
+            validation_summary={},
+            anomaly_details={},
+            data_quality_score=0.0,
+            recommended_actions=["No data to validate"]
+        )
+    
+    # Initialize results tracking
+    validation_summary = {
+        'ohlc_violations': 0,
+        'impossible_price_movements': 0,
+        'volume_anomalies_low': 0,
+        'volume_anomalies_high': 0,
+        'missing_data_points': 0,
+        'negative_prices': 0,
+        'zero_volume_periods': 0
+    }
+    
+    anomaly_details = {
+        'ohlc_violations': [],
+        'impossible_price_movements': [],
+        'volume_anomalies': [],
+        'data_quality_issues': []
+    }
+    
+    recommended_actions = []
+    
+    # Validate required columns
+    required_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
+        error_msg = f"Missing required columns: {missing_cols}"
+        logger.error(error_msg)
+        return ValidationResult(
+            total_records=len(df),
+            validation_summary={'error': 1},
+            anomaly_details={'error': [error_msg]},
+            data_quality_score=0.0,
+            recommended_actions=[f"Add missing columns: {missing_cols}"]
+        )
+    
+    try:
+        # 1. OHLC RELATIONSHIP VALIDATION
+        logger.info("Validating OHLC relationships...")
+        ohlc_violations = _validate_ohlc_relationships(df)
+        validation_summary['ohlc_violations'] = len(ohlc_violations)
+        anomaly_details['ohlc_violations'] = ohlc_violations
+        
+        # 2. IMPOSSIBLE PRICE MOVEMENTS DETECTION
+        logger.info("Detecting impossible price movements...")
+        price_anomalies = _detect_impossible_price_movements(
+            df, atr_period, price_change_threshold
+        )
+        validation_summary['impossible_price_movements'] = len(price_anomalies)
+        anomaly_details['impossible_price_movements'] = price_anomalies
+        
+        # 3. VOLUME CONSISTENCY ANALYSIS
+        logger.info("Analyzing volume consistency...")
+        volume_anomalies = _analyze_volume_consistency(
+            df, volume_window, volume_low_percentile, volume_high_percentile
+        )
+        validation_summary['volume_anomalies_low'] = len(volume_anomalies['low'])
+        validation_summary['volume_anomalies_high'] = len(volume_anomalies['high'])
+        anomaly_details['volume_anomalies'] = volume_anomalies['low'] + volume_anomalies['high']
+        
+        # 4. ADDITIONAL DATA QUALITY CHECKS
+        logger.info("Performing additional data quality checks...")
+        quality_issues = _perform_additional_quality_checks(df)
+        validation_summary.update(quality_issues['summary'])
+        anomaly_details['data_quality_issues'] = quality_issues['details']
+        
+        # 5. CALCULATE DATA QUALITY SCORE
+        quality_score = _calculate_data_quality_score(df, validation_summary)
+        
+        # 6. GENERATE RECOMMENDATIONS
+        recommended_actions = _generate_recommendations(validation_summary, quality_score)
+        
+        logger.info(f"Validation completed. Quality score: {quality_score:.2f}")
+        
+        return ValidationResult(
+            total_records=len(df),
+            validation_summary=validation_summary,
+            anomaly_details=anomaly_details,
+            data_quality_score=quality_score,
+            recommended_actions=recommended_actions
+        )
+        
+    except Exception as e:
+        logger.error(f"Error during validation: {e}")
+        return ValidationResult(
+            total_records=len(df),
+            validation_summary={'validation_error': 1},
+            anomaly_details={'error': [str(e)]},
+            data_quality_score=0.0,
+            recommended_actions=[f"Fix validation error: {e}"]
+        )
+
+
+def _validate_ohlc_relationships(df: pd.DataFrame) -> List[Dict]:
+    """Validate OHLC price relationships."""
+    violations = []
+    
+    try:
+        # Check High >= max(Open, Close) and High >= Low
+        high_violations = (
+            (df['High'] < df['Open']) | 
+            (df['High'] < df['Close']) | 
+            (df['High'] < df['Low'])
+        )
+        
+        # Check Low <= min(Open, Close) and Low <= High  
+        low_violations = (
+            (df['Low'] > df['Open']) | 
+            (df['Low'] > df['Close']) | 
+            (df['Low'] > df['High'])
+        )
+        
+        # Combine violations
+        all_violations = high_violations | low_violations
+        
+        # Create detailed violation records
+        for timestamp in df.index[all_violations]:
+            row = df.loc[timestamp]
+            violation_types = []
+            
+            if row['High'] < max(row['Open'], row['Close'], row['Low']):
+                violation_types.append("High < max(O,C,L)")
+            if row['Low'] > min(row['Open'], row['Close'], row['High']):
+                violation_types.append("Low > min(O,C,H)")
+                
+            violations.append({
+                'timestamp': timestamp,
+                'violation_type': 'OHLC_relationship',
+                'details': violation_types,
+                'values': {
+                    'Open': row['Open'],
+                    'High': row['High'], 
+                    'Low': row['Low'],
+                    'Close': row['Close']
+                },
+                'severity': 'high'
+            })
+            
+    except Exception as e:
+        logger.error(f"Error in OHLC validation: {e}")
+        
+    return violations
+
+
+def _detect_impossible_price_movements(
+    df: pd.DataFrame, 
+    atr_period: int, 
+    threshold: float
+) -> List[Dict]:
+    """Detect impossible price movements using ATR-normalized analysis."""
+    anomalies = []
+    
+    try:
+        if len(df) < atr_period + 1:
+            logger.warning("Insufficient data for price movement analysis")
+            return anomalies
+            
+        # Calculate ATR
+        atr_series = _calculate_atr_for_validation(df, atr_period)
+        
+        # Calculate price changes
+        price_changes = df['Close'].pct_change()
+        
+        # Calculate ATR-normalized price changes
+        atr_normalized_changes = price_changes.abs() / (atr_series / df['Close'])
+        
+        # Detect outliers using statistical methods
+        # Method 1: Standard deviation threshold
+        mean_normalized = atr_normalized_changes.mean()
+        std_normalized = atr_normalized_changes.std()
+        
+        outliers_std = atr_normalized_changes > (mean_normalized + threshold * std_normalized)
+        
+        # Method 2: Z-score approach for additional validation
+        z_scores = np.abs(stats.zscore(price_changes.dropna()))
+        outliers_zscore = z_scores > threshold
+        
+        # Combine both methods
+        outlier_indices = df.index[outliers_std | outliers_zscore]
+        
+        # Create detailed anomaly records
+        for timestamp in outlier_indices:
+            if timestamp in price_changes.index and not pd.isna(price_changes.loc[timestamp]):
+                current_price = df.loc[timestamp, 'Close']
+                previous_timestamp = df.index[df.index < timestamp][-1]
+                previous_price = df.loc[previous_timestamp, 'Close']
+                
+                change_pct = price_changes.loc[timestamp] * 100
+                atr_value = atr_series.loc[timestamp] if timestamp in atr_series.index else np.nan
+                
+                anomalies.append({
+                    'timestamp': timestamp,
+                    'violation_type': 'impossible_price_movement',
+                    'details': f"{change_pct:.2f}% price change",
+                    'values': {
+                        'current_price': current_price,
+                        'previous_price': previous_price,
+                        'change_percent': change_pct,
+                        'atr_value': atr_value,
+                        'z_score': z_scores[df.index.get_loc(timestamp)] if timestamp in df.index else np.nan
+                    },
+                    'severity': 'high' if abs(change_pct) > 10 else 'medium'
+                })
+                
+    except Exception as e:
+        logger.error(f"Error in price movement detection: {e}")
+        
+    return anomalies
+
+
+def _analyze_volume_consistency(
+    df: pd.DataFrame,
+    window: int,
+    low_percentile: float,
+    high_percentile: float
+) -> Dict[str, List[Dict]]:
+    """Analyze volume consistency and detect anomalies."""
+    volume_anomalies = {'low': [], 'high': []}
+    
+    try:
+        if 'Volume' not in df.columns or len(df) < window:
+            logger.warning("Insufficient data for volume analysis")
+            return volume_anomalies
+            
+        # Calculate rolling percentiles
+        volume_low_threshold = df['Volume'].rolling(window=window).quantile(low_percentile / 100)
+        volume_high_threshold = df['Volume'].rolling(window=window).quantile(high_percentile / 100)
+        
+        # Detect low volume anomalies
+        low_volume_mask = (df['Volume'] < volume_low_threshold) & (df['Volume'] > 0)
+        
+        # Detect high volume anomalies  
+        high_volume_mask = df['Volume'] > volume_high_threshold
+        
+        # Create detailed anomaly records for low volume
+        for timestamp in df.index[low_volume_mask]:
+            current_volume = df.loc[timestamp, 'Volume']
+            threshold = volume_low_threshold.loc[timestamp]
+            
+            # Calculate how far below threshold
+            deviation_ratio = (threshold - current_volume) / threshold if threshold > 0 else 0
+            
+            volume_anomalies['low'].append({
+                'timestamp': timestamp,
+                'violation_type': 'volume_anomaly_low',
+                'details': f"Volume {deviation_ratio:.1%} below {low_percentile}th percentile",
+                'values': {
+                    'current_volume': current_volume,
+                    'threshold': threshold,
+                    'deviation_ratio': deviation_ratio
+                },
+                'severity': 'high' if deviation_ratio > 0.8 else 'medium'
+            })
+            
+        # Create detailed anomaly records for high volume
+        for timestamp in df.index[high_volume_mask]:
+            current_volume = df.loc[timestamp, 'Volume']
+            threshold = volume_high_threshold.loc[timestamp]
+            
+            # Calculate how far above threshold
+            deviation_ratio = (current_volume - threshold) / threshold if threshold > 0 else 0
+            
+            volume_anomalies['high'].append({
+                'timestamp': timestamp,
+                'violation_type': 'volume_anomaly_high', 
+                'details': f"Volume {deviation_ratio:.1%} above {high_percentile}th percentile",
+                'values': {
+                    'current_volume': current_volume,
+                    'threshold': threshold,
+                    'deviation_ratio': deviation_ratio
+                },
+                'severity': 'high' if deviation_ratio > 5 else 'medium'
+            })
+            
+    except Exception as e:
+        logger.error(f"Error in volume analysis: {e}")
+        
+    return volume_anomalies
+
+
+def _perform_additional_quality_checks(df: pd.DataFrame) -> Dict:
+    """Perform additional data quality checks."""
+    summary = {}
+    details = []
+    
+    try:
+        # Check for missing data
+        missing_data = df.isnull().sum().sum()
+        summary['missing_data_points'] = missing_data
+        
+        # Check for negative prices
+        price_cols = ['Open', 'High', 'Low', 'Close']
+        negative_prices = 0
+        for col in price_cols:
+            if col in df.columns:
+                negative_count = (df[col] <= 0).sum()
+                negative_prices += negative_count
+                
+                if negative_count > 0:
+                    details.append({
+                        'issue_type': 'negative_prices',
+                        'column': col,
+                        'count': negative_count,
+                        'severity': 'high'
+                    })
+                    
+        summary['negative_prices'] = negative_prices
+        
+        # Check for zero volume periods
+        if 'Volume' in df.columns:
+            zero_volume = (df['Volume'] == 0).sum()
+            summary['zero_volume_periods'] = zero_volume
+            
+            if zero_volume > 0:
+                details.append({
+                    'issue_type': 'zero_volume',
+                    'count': zero_volume,
+                    'percentage': (zero_volume / len(df)) * 100,
+                    'severity': 'medium' if zero_volume < len(df) * 0.01 else 'high'
+                })
+                
+        # Check for duplicate timestamps
+        duplicate_timestamps = df.index.duplicated().sum()
+        if duplicate_timestamps > 0:
+            summary['duplicate_timestamps'] = duplicate_timestamps
+            details.append({
+                'issue_type': 'duplicate_timestamps',
+                'count': duplicate_timestamps,
+                'severity': 'high'
+            })
+            
+    except Exception as e:
+        logger.error(f"Error in additional quality checks: {e}")
+        details.append({
+            'issue_type': 'validation_error',
+            'error': str(e),
+            'severity': 'high'
+        })
+        
+    return {'summary': summary, 'details': details}
+
+
+def _calculate_atr_for_validation(df: pd.DataFrame, period: int) -> pd.Series:
+    """Calculate ATR for validation purposes."""
+    try:
+        if len(df) < period:
+            return pd.Series(df['High'] - df['Low'], index=df.index)
+            
+        # True Range calculation
+        df_shifted = df.shift(1)
+        tr1 = df['High'] - df['Low']
+        tr2 = abs(df['High'] - df_shifted['Close'])
+        tr3 = abs(df['Low'] - df_shifted['Close'])
+        
+        true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        atr = true_range.rolling(window=period).mean()
+        
+        # Fill NaN values
+        atr.fillna(method='bfill', inplace=True)
+        atr.fillna(true_range.mean(), inplace=True)
+        
+        return atr
+        
+    except Exception as e:
+        logger.error(f"Error calculating ATR: {e}")
+        return pd.Series(df['High'] - df['Low'], index=df.index)
+
+
+def _calculate_data_quality_score(df: pd.DataFrame, summary: Dict[str, int]) -> float:
+    """Calculate overall data quality score (0-100)."""
+    try:
+        total_records = len(df)
+        if total_records == 0:
+            return 0.0
+            
+        # Weight different types of issues
+        weights = {
+            'ohlc_violations': 10,  # High impact
+            'impossible_price_movements': 8,
+            'negative_prices': 10,
+            'volume_anomalies_low': 3,
+            'volume_anomalies_high': 5,
+            'missing_data_points': 7,
+            'zero_volume_periods': 2,
+            'duplicate_timestamps': 9
+        }
+        
+        # Calculate weighted penalty
+        total_penalty = 0
+        for issue_type, count in summary.items():
+            if issue_type in weights:
+                penalty = (count / total_records) * weights[issue_type]
+                total_penalty += penalty
+                
+        # Convert to score (0-100)
+        score = max(0, 100 - total_penalty)
+        
+        return round(score, 2)
+        
+    except Exception as e:
+        logger.error(f"Error calculating quality score: {e}")
+        return 0.0
+
+
+def _generate_recommendations(summary: Dict[str, int], quality_score: float) -> List[str]:
+    """Generate actionable recommendations based on validation results."""
+    recommendations = []
+    
+    try:
+        if quality_score >= 95:
+            recommendations.append("✅ Excellent data quality - no major issues detected")
+        elif quality_score >= 85:
+            recommendations.append("✅ Good data quality - minor issues may need attention")
+        elif quality_score >= 70:
+            recommendations.append("⚠️ Moderate data quality - several issues need correction")
+        else:
+            recommendations.append("❌ Poor data quality - immediate attention required")
+            
+        # Specific recommendations
+        if summary.get('ohlc_violations', 0) > 0:
+            recommendations.append(f"🔧 Fix {summary['ohlc_violations']} OHLC relationship violations")
+            
+        if summary.get('impossible_price_movements', 0) > 0:
+            recommendations.append(f"🔍 Investigate {summary['impossible_price_movements']} unusual price movements")
+            
+        if summary.get('negative_prices', 0) > 0:
+            recommendations.append(f"💰 Correct {summary['negative_prices']} negative price entries")
+            
+        if summary.get('volume_anomalies_low', 0) + summary.get('volume_anomalies_high', 0) > 10:
+            recommendations.append("📊 Review volume data quality and outlier detection thresholds")
+            
+        if summary.get('missing_data_points', 0) > 0:
+            recommendations.append("📝 Address missing data points through imputation or data source fixes")
+            
+    except Exception as e:
+        logger.error(f"Error generating recommendations: {e}")
+        recommendations.append("❓ Unable to generate recommendations due to error")
+        
+    return recommendations
     """
     Convenience function for data imputation.
     
@@ -378,10 +866,52 @@ def impute_data(df: pd.DataFrame, gaps: List[Gap]) -> ImputationResult:
     return imputer.impute_data(df, gaps)
 
 
+def validate_data(df: pd.DataFrame, **kwargs) -> ValidationResult:
+    """
+    Convenience function for comprehensive OHLCV data validation.
+    
+    Args:
+        df (pd.DataFrame): OHLCV DataFrame with datetime index
+        **kwargs: Additional arguments for validation (atr_period, volume_window, etc.)
+        
+    Returns:
+        ValidationResult: Comprehensive validation results
+    """
+    return validate_ohlcv_data(df, **kwargs)
+
+
 # Example usage and testing
 def main():
     """Example usage of the data imputation module."""
     
+    # Test data validation
+    print("\n" + "="*60)
+    print("Data Validation - Example Usage")
+    print("="*60)
+    
+    # Validate the sample data
+    validation_result = validate_ohlcv_data(df)
+    
+    print(f"\nValidation Results:")
+    print(f"  Total Records: {validation_result.total_records}")
+    print(f"  Data Quality Score: {validation_result.data_quality_score}/100")
+    
+    print(f"\nValidation Summary:")
+    for check, count in validation_result.validation_summary.items():
+        print(f"  {check}: {count}")
+        
+    if validation_result.anomaly_details:
+        print(f"\nSample Anomalies:")
+        for anomaly_type, anomalies in validation_result.anomaly_details.items():
+            if anomalies:
+                print(f"  {anomaly_type}: {len(anomalies)} detected")
+                if len(anomalies) > 0:
+                    print(f"    Example: {anomalies[0]['details']}")
+                    
+    print(f"\nRecommendations:")
+    for recommendation in validation_result.recommended_actions:
+        print(f"  {recommendation}")
+
     print("\n" + "="*60)
     print("Data Imputation - Example Usage")
     print("="*60)

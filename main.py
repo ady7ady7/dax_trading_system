@@ -24,7 +24,7 @@ import numpy as np
 # Local imports (will be implemented in subsequent modules)
 from src.data.data_ingestion import load_and_convert_data, DataIngestionError
 from src.data.gap_detector import GapDetector
-from src.data.etl_pipeline import impute_data, DataImputer
+from src.data.etl_pipeline import impute_data, DataImputer, validate_ohlcv_data
 # from src.data.validator import DataValidator
 # from src.features.engineering import FeatureEngineer
 # from src.models.regime import MarketRegimeDetector
@@ -137,6 +137,33 @@ def main() -> None:
                     print(f"   Columns: {list(df.columns)}")
                     print(f"   Date Range: {df.index.min()} to {df.index.max()}")
                     
+                    # Test Data Validation
+                    logger.info("Testing comprehensive data validation...")
+                    try:
+                        # For large datasets, validate on a sample
+                        if len(df) > 100000:
+                            logger.info("Large dataset detected, validating sample...")
+                            validation_df = df.head(7 * 24 * 60)  # ~1 week
+                        else:
+                            validation_df = df
+                            
+                        validation_result = validate_ohlcv_data(validation_df)
+                        
+                        print(f"\n🔍 Data Validation Results:")
+                        print(f"   Records Validated: {validation_result.total_records:,}")
+                        print(f"   Data Quality Score: {validation_result.data_quality_score:.1f}/100")
+                        print(f"   OHLC Violations: {validation_result.validation_summary.get('ohlc_violations', 0)}")
+                        print(f"   Price Movement Anomalies: {validation_result.validation_summary.get('impossible_price_movements', 0)}")
+                        print(f"   Volume Anomalies: {validation_result.validation_summary.get('volume_anomalies_low', 0) + validation_result.validation_summary.get('volume_anomalies_high', 0)}")
+                        
+                        # Show top recommendation
+                        if validation_result.recommended_actions:
+                            print(f"   Top Recommendation: {validation_result.recommended_actions[0]}")
+                            
+                    except Exception as e:
+                        logger.error(f"Data validation failed: {e}")
+                        print(f"\n❌ Data validation failed: {e}")
+                    
                     # Test Gap Detection
                     logger.info("Testing gap detection...")
                     gap_detector = GapDetector()
@@ -230,9 +257,15 @@ def main() -> None:
         # System is now ready with data ingestion capability
         print("\n🚀 System Status:")
         print("   ✅ Data Ingestion Module - Ready")
+        print("   ✅ Data Validation Module - Ready")
         print("   ✅ Gap Detection Module - Ready")
         print("   ✅ Data Imputation Module - Ready")
         print("   ⏳ Feature Engineering - Pending")
+        print("   ⏳ Market Regime Detection - Pending") 
+        print("   ⏳ Signal Generation - Pending")
+        print("   ⏳ Risk Management - Pending")
+        print("   ⏳ Backtesting Engine - Pending")
+        print("\nNext: Implement feature engineering and technical indicators.")⏳ Feature Engineering - Pending")
         print("   ⏳ Market Regime Detection - Pending") 
         print("   ⏳ Signal Generation - Pending")
         print("   ⏳ Risk Management - Pending")
