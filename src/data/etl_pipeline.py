@@ -852,6 +852,10 @@ def _generate_recommendations(summary: Dict[str, int], quality_score: float) -> 
         recommendations.append("❓ Unable to generate recommendations due to error")
         
     return recommendations
+
+
+# Convenience functions for direct use
+def impute_data(df: pd.DataFrame, gaps: List[Gap]) -> ImputationResult:
     """
     Convenience function for data imputation.
     
@@ -889,6 +893,27 @@ def main():
     print("Data Validation - Example Usage")
     print("="*60)
     
+    # Create sample data first
+    dates = pd.date_range('2024-01-15 09:00', '2024-01-15 12:00', freq='1min', tz='Europe/Berlin')
+    
+    # Sample OHLCV data
+    np.random.seed(42)
+    base_price = 18000
+    sample_data = {
+        'Open': base_price + np.random.normal(0, 50, len(dates)),
+        'High': base_price + 20 + np.random.normal(0, 30, len(dates)),
+        'Low': base_price - 20 + np.random.normal(0, 30, len(dates)),
+        'Close': base_price + np.random.normal(0, 50, len(dates)),
+        'Volume': np.random.randint(100, 1000, len(dates))
+    }
+    
+    # Ensure OHLC relationships
+    for i in range(len(dates)):
+        sample_data['High'][i] = max(sample_data['High'][i], sample_data['Open'][i], sample_data['Close'][i])
+        sample_data['Low'][i] = min(sample_data['Low'][i], sample_data['Open'][i], sample_data['Close'][i])
+    
+    df = pd.DataFrame(sample_data, index=dates)
+    
     # Validate the sample data
     validation_result = validate_ohlcv_data(df)
     
@@ -916,52 +941,32 @@ def main():
     print("Data Imputation - Example Usage")
     print("="*60)
     
-    # Create sample data with gaps for testing
-    dates = pd.date_range('2024-01-15 09:00', '2024-01-15 12:00', freq='1min', tz='Europe/Berlin')
-    
-    # Sample OHLCV data
-    np.random.seed(42)
-    base_price = 18000
-    sample_data = {
-        'Open': base_price + np.random.normal(0, 50, len(dates)),
-        'High': base_price + 20 + np.random.normal(0, 30, len(dates)),
-        'Low': base_price - 20 + np.random.normal(0, 30, len(dates)),
-        'Close': base_price + np.random.normal(0, 50, len(dates)),
-        'Volume': np.random.randint(100, 1000, len(dates))
-    }
-    
-    # Ensure OHLC relationships
-    for i in range(len(dates)):
-        sample_data['High'][i] = max(sample_data['High'][i], sample_data['Open'][i], sample_data['Close'][i])
-        sample_data['Low'][i] = min(sample_data['Low'][i], sample_data['Open'][i], sample_data['Close'][i])
-    
-    df = pd.DataFrame(sample_data, index=dates)
-    
-    # Remove some data to create gaps
+    # Remove some data to create gaps for imputation testing
     gap_indices = [
         pd.date_range('2024-01-15 10:00', '2024-01-15 10:02', freq='1min', tz='Europe/Berlin'),  # Minor gap
         pd.date_range('2024-01-15 11:00', '2024-01-15 11:15', freq='1min', tz='Europe/Berlin'),  # Moderate gap
     ]
     
+    df_with_gaps = df.copy()
     for gap_range in gap_indices:
-        df = df.drop(gap_range, errors='ignore')
+        df_with_gaps = df_with_gaps.drop(gap_range, errors='ignore')
     
     print(f"Original data points: {len(dates)}")
-    print(f"Data after creating gaps: {len(df)}")
+    print(f"Data after creating gaps: {len(df_with_gaps)}")
     
     # Detect gaps
     gap_detector = GapDetector()
-    gaps = gap_detector.detect_gaps(df)
+    gaps = gap_detector.detect_gaps(df_with_gaps)
     
     print(f"Detected {len(gaps)} gaps:")
     for gap in gaps:
         print(f"  {gap.severity.title()} gap: {gap.start_time} to {gap.end_time} ({gap.duration_minutes} min)")
     
     # Impute data
-    result = impute_data(df, gaps)
+    result = impute_data(df_with_gaps, gaps)
     
     print(f"\nImputation Results:")
-    print(f"  Original rows: {len(df)}")
+    print(f"  Original rows: {len(df_with_gaps)}")
     print(f"  Imputed rows: {len(result.imputed_df)}")
     print(f"  Summary: {result.imputation_summary}")
     
