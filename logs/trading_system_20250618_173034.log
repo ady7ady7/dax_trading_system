@@ -1,0 +1,14 @@
+2025-06-18 17:30:34,907 - root - INFO - Environment validation passed
+2025-06-18 17:30:34,909 - root - INFO - Configuration loaded from config/config.yaml
+2025-06-18 17:30:34,909 - __main__ - INFO - Initializing trading system components...
+2025-06-18 17:30:34,909 - __main__ - INFO - Found 1 CSV files in data/raw
+2025-06-18 17:30:34,909 - __main__ - INFO - Testing data ingestion with: dax-1m_bk.csv
+2025-06-18 17:30:34,909 - src.data.data_ingestion - INFO - Loading data from: data\raw\dax-1m_bk.csv
+2025-06-18 17:30:34,909 - src.data.data_ingestion - INFO - Reading CSV file...
+2025-06-18 17:30:34,914 - src.data.data_ingestion - INFO - Detected CSV separator: ';'
+2025-06-18 17:30:36,872 - src.data.data_ingestion - INFO - Columns found: ['16/06/2000', '02:54', '7921.860511', '7921.860511.1', '7913.325173', '7916.525925', '89']
+2025-06-18 17:30:36,873 - src.data.data_ingestion - ERROR - Unexpected error loading data: No timestamp column found. Available columns: ['16/06/2000', '02:54', '7921.860511', '7921.860511.1', '7913.325173', '7916.525925', '89']
+2025-06-18 17:30:36,873 - __main__ - ERROR - Data ingestion failed: Failed to load data from data\raw\dax-1m_bk.csv: No timestamp column found. Available columns: ['16/06/2000', '02:54', '7921.860511', '7921.860511.1', '7913.325173', '7916.525925', '89']
+2025-06-18 17:30:36,888 - __main__ - INFO - System initialized successfully
+2025-06-18 17:30:36,888 - __main__ - INFO - Starting main execution loop...
+2025-06-18 17:30:36,889 - __main__ - INFO - Trading system execution completed

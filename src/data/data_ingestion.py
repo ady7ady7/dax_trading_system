@@ -1,10 +1,11 @@
 """
-Data Ingestion Module
+DAX Trading System - Data Ingestion Module
 
 This module handles the ingestion of raw DAX 1-minute OHLCV data from CSV files,
-with timezone conversion from Chicago time to CET, including proper DST handling.
+with robust timezone conversion from Chicago time to CET, including proper DST handling.
 
-Author: ady7ady7
+Author: DAX Trading System
+Created: 2025-06-18
 """
 
 import logging
@@ -75,18 +76,42 @@ def load_and_convert_data(
         if file_size_mb > 500:  # Warn for files larger than 500MB
             logger.warning(f"Large file detected: {file_size_mb:.1f}MB")
             
-        # Read CSV file
+        # Read CSV file with flexible delimiter detection
         logger.info("Reading CSV file...")
-        df = pd.read_csv(file_path)
         
-        # Validate columns exist
-        missing_cols = set(expected_columns) - set(df.columns)
-        if missing_cols:
-            available_cols = list(df.columns)
-            raise DataIngestionError(
-                f"Missing required columns: {missing_cols}. "
-                f"Available columns: {available_cols}"
-            )
+        # Try different separators (common in European data)
+        separators = [',', ';', '\t', '|']
+        df = None
+        
+        for sep in separators:
+            try:
+                df_test = pd.read_csv(file_path, sep=sep, nrows=5)
+                if len(df_test.columns) > 1:  # Found proper separator
+                    logger.info(f"Detected CSV separator: '{sep}'")
+                    df = pd.read_csv(file_path, sep=sep)
+                    break
+            except Exception:
+                continue
+                
+        if df is None:
+            # Fallback to default comma separator
+            df = pd.read_csv(file_path)
+            
+        # If we have 7 columns, assume standard format: Date, Time, Open, High, Low, Close, Volume
+        if len(df.columns) == 7:
+            df.columns = ['Date', 'Time', 'Open', 'High', 'Low', 'Close', 'Volume']
+            df[timestamp_col] = df['Date'] + ' ' + df['Time']
+            df.drop(['Date', 'Time'], axis=1, inplace=True)
+        
+        # If we have 6 columns, assume: DateTime, Open, High, Low, Close, Volume  
+        elif len(df.columns) == 6:
+            df.columns = [timestamp_col, 'Open', 'High', 'Low', 'Close', 'Volume']
+            
+        # Convert numeric columns
+        numeric_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
             
         # Log initial data info
         logger.info(f"Raw data loaded: {len(df)} rows, {len(df.columns)} columns")
@@ -282,17 +307,3 @@ if __name__ == "__main__":
     )
     
     main()
-
-
-
-
-    # Basic usage
-#df = load_and_convert_data("data/raw/DAX_1min_2024.csv")
-
-# Advanced usage with custom validation
-'''df = load_and_convert_data(
-    file_path="data/raw/DAX_data.csv",
-    timestamp_col="datetime",
-    expected_columns=["datetime", "Open", "High", "Low", "Close", "Volume"],
-    validate_ohlc=True
-)'''

@@ -22,7 +22,7 @@ import pandas as pd
 import numpy as np
 
 # Local imports (will be implemented in subsequent modules)
-# from src.data.loader import DataLoader
+from src.data.data_ingestion import load_and_convert_data, DataIngestionError
 # from src.data.validator import DataValidator
 # from src.features.engineering import FeatureEngineer
 # from src.models.regime import MarketRegimeDetector
@@ -107,8 +107,51 @@ def main() -> None:
         # Initialize system components
         logger.info("Initializing trading system components...")
         
-        # TODO: Initialize components as they are implemented
-        # data_loader = DataLoader(config.get('data', {}))
+        # Test data ingestion functionality
+        data_config = config.get('data', {})
+        raw_data_path = data_config.get('raw_data_path', 'data/raw')
+        
+        # Look for CSV files in the raw data directory
+        raw_data_dir = Path(raw_data_path)
+        if raw_data_dir.exists():
+            csv_files = list(raw_data_dir.glob("*.csv"))
+            if csv_files:
+                logger.info(f"Found {len(csv_files)} CSV files in {raw_data_path}")
+                
+                # Test loading the first CSV file found
+                test_file = csv_files[0]
+                logger.info(f"Testing data ingestion with: {test_file.name}")
+                
+                try:
+                    # Load and convert data using our new function
+                    df = load_and_convert_data(test_file)
+                    logger.info(f"Successfully loaded data: {len(df)} rows")
+                    logger.info(f"Date range: {df.index.min()} to {df.index.max()}")
+                    logger.info(f"Columns: {list(df.columns)}")
+                    
+                    print(f"\n✅ Data Ingestion Test Successful!")
+                    print(f"   File: {test_file.name}")
+                    print(f"   Rows: {len(df):,}")
+                    print(f"   Columns: {list(df.columns)}")
+                    print(f"   Date Range: {df.index.min()} to {df.index.max()}")
+                    
+                except DataIngestionError as e:
+                    logger.error(f"Data ingestion failed: {e}")
+                    print(f"\n❌ Data Ingestion Test Failed: {e}")
+                except Exception as e:
+                    logger.error(f"Unexpected error during data ingestion: {e}")
+                    print(f"\n❌ Unexpected Error: {e}")
+            else:
+                logger.info(f"No CSV files found in {raw_data_path}")
+                print(f"\n📁 No CSV files found in {raw_data_path}")
+                print("   Place your DAX 1-minute OHLCV CSV files there to test data ingestion.")
+        else:
+            logger.info(f"Raw data directory {raw_data_path} does not exist, creating it...")
+            raw_data_dir.mkdir(parents=True, exist_ok=True)
+            print(f"\n📁 Created raw data directory: {raw_data_path}")
+            print("   Place your DAX 1-minute OHLCV CSV files there to test data ingestion.")
+        
+        # TODO: Initialize other components as they are implemented
         # feature_engineer = FeatureEngineer(config.get('features', {}))
         # regime_detector = MarketRegimeDetector(config.get('regime', {}))
         # signal_generator = SignalGenerator(config.get('strategy', {}))
@@ -120,9 +163,15 @@ def main() -> None:
         # Main execution logic will be implemented here
         logger.info("Starting main execution loop...")
         
-        # Placeholder for main system logic
-        print("\n[PLACEHOLDER] Main execution logic will be implemented here")
-        print("System components ready for development...")
+        # System is now ready with data ingestion capability
+        print("\n🚀 System Status:")
+        print("   ✅ Data Ingestion Module - Ready")
+        print("   ⏳ Feature Engineering - Pending")
+        print("   ⏳ Market Regime Detection - Pending") 
+        print("   ⏳ Signal Generation - Pending")
+        print("   ⏳ Risk Management - Pending")
+        print("   ⏳ Backtesting Engine - Pending")
+        print("\nNext: Implement data validation and gap detection modules.")
         
         logger.info("Trading system execution completed")
         

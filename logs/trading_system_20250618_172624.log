@@ -1,0 +1,12 @@
+2025-06-18 17:26:24,774 - root - INFO - Environment validation passed
+2025-06-18 17:26:24,776 - root - INFO - Configuration loaded from config/config.yaml
+2025-06-18 17:26:24,776 - __main__ - INFO - Initializing trading system components...
+2025-06-18 17:26:24,776 - __main__ - INFO - Found 1 CSV files in data/raw
+2025-06-18 17:26:24,776 - __main__ - INFO - Testing data ingestion with: dax-1m_bk.csv
+2025-06-18 17:26:24,776 - src.data.data_ingestion - INFO - Loading data from: data\raw\dax-1m_bk.csv
+2025-06-18 17:26:24,777 - src.data.data_ingestion - INFO - Reading CSV file...
+2025-06-18 17:26:28,153 - src.data.data_ingestion - ERROR - Unexpected error loading data: Missing required columns: {'Open', 'Close', 'Volume', 'High', 'timestamp', 'Low'}. Available columns: ['16/06/2000;02:54;7921.860511;7921.860511;7913.325173;7916.525925;89']
+2025-06-18 17:26:28,154 - __main__ - ERROR - Data ingestion failed: Failed to load data from data\raw\dax-1m_bk.csv: Missing required columns: {'Open', 'Close', 'Volume', 'High', 'timestamp', 'Low'}. Available columns: ['16/06/2000;02:54;7921.860511;7921.860511;7913.325173;7916.525925;89']
+2025-06-18 17:26:28,208 - __main__ - INFO - System initialized successfully
+2025-06-18 17:26:28,208 - __main__ - INFO - Starting main execution loop...
+2025-06-18 17:26:28,208 - __main__ - INFO - Trading system execution completed

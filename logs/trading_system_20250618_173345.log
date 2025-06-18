@@ -1,0 +1,26 @@
+2025-06-18 17:33:45,679 - root - INFO - Environment validation passed
+2025-06-18 17:33:45,681 - root - INFO - Configuration loaded from config/config.yaml
+2025-06-18 17:33:45,681 - __main__ - INFO - Initializing trading system components...
+2025-06-18 17:33:45,682 - __main__ - INFO - Found 1 CSV files in data/raw
+2025-06-18 17:33:45,682 - __main__ - INFO - Testing data ingestion with: dax-1m_bk.csv
+2025-06-18 17:33:45,682 - src.data.data_ingestion - INFO - Loading data from: data\raw\dax-1m_bk.csv
+2025-06-18 17:33:45,682 - src.data.data_ingestion - INFO - Reading CSV file...
+2025-06-18 17:33:45,687 - src.data.data_ingestion - INFO - Detected CSV separator: ';'
+2025-06-18 17:33:48,246 - src.data.data_ingestion - INFO - Raw data loaded: 5477634 rows, 6 columns
+2025-06-18 17:33:48,247 - src.data.data_ingestion - INFO - Date range (raw): 16/06/2000 02:55 to 11/06/2025 00:00
+2025-06-18 17:33:48,247 - src.data.data_ingestion - INFO - Converting timestamps...
+2025-06-18 17:33:55,190 - src.data.data_ingestion - INFO - Localizing naive timestamps to Chicago timezone...
+2025-06-18 17:33:55,745 - src.data.data_ingestion - INFO - Converting to Berlin timezone (CET/CEST)...
+2025-06-18 17:33:55,760 - src.data.data_ingestion - INFO - Validating OHLC relationships...
+2025-06-18 17:33:57,213 - src.data.data_ingestion - WARNING - Removed 11 duplicate timestamps
+2025-06-18 17:33:57,213 - src.data.data_ingestion - INFO - Final data: 5477623 rows
+2025-06-18 17:33:57,220 - src.data.data_ingestion - INFO - Date range (CET): 2000-06-16 09:55:00+02:00 to 2025-06-11 07:00:00+02:00
+2025-06-18 17:33:57,220 - src.data.data_ingestion - INFO - Timezone: Europe/Berlin
+2025-06-18 17:33:57,220 - src.data.data_ingestion - WARNING - Data contains very old records: 2000-06-16 09:55:00+02:00
+2025-06-18 17:33:57,457 - src.data.data_ingestion - INFO - Note: 1406463 records outside typical market hours (8-18 CET)
+2025-06-18 17:33:57,458 - __main__ - INFO - Successfully loaded data: 5477623 rows
+2025-06-18 17:33:57,458 - __main__ - INFO - Date range: 2000-06-16 09:55:00+02:00 to 2025-06-11 07:00:00+02:00
+2025-06-18 17:33:57,458 - __main__ - INFO - Columns: ['Open', 'High', 'Low', 'Close', 'Volume']
+2025-06-18 17:33:57,458 - __main__ - INFO - System initialized successfully
+2025-06-18 17:33:57,459 - __main__ - INFO - Starting main execution loop...
+2025-06-18 17:33:57,459 - __main__ - INFO - Trading system execution completed

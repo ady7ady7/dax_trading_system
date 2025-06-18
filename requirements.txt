@@ -1,6 +1,9 @@
+# Python Version Requirement
+# Requires Python 3.9+
+
 # Core Data Processing
 pandas>=2.3.0
-numpy>=2.3.0
+numpy>=1.26.0,<2.2.0  # Compatible with TensorFlow 2.19.0
 scipy>=1.15.3
 
 # Machine Learning
