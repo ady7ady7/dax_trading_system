@@ -1,0 +1,106 @@
+test test_feature_engineering_simple works correctly, but we want to make sure that actual engineering works well!
+We have to test/check all gaps and sort them out and check if all data is processed properly + make sure our feature engineering works well with cleaned data.
+
+
+
+$ python scripts/test_feature_engineering_simple.py
+🔍 Project root: C:\Users\HARDPC\Desktop\AL\projekty\dax_trading_system
+✅ Successfully imported FeatureEngineer
+🧪 Simple Feature Engineering Test
+==================================================
+
+1️⃣ Loading historical data...
+✅ Loaded historical data: 5,477,623 records
+   Date range: 2000-06-16 09:55:00+02:00 to 2025-06-11 07:00:00+02:00
+📊 Using last 5,000 records for testing
+
+2️⃣ Testing feature engineering...
+INFO:src.features.engineering:FeatureEngineer initialized for timezone Europe/Berlin
+INFO:src.features.engineering:Market hours: 09:00:00 - 17:30:00
+INFO:src.features.engineering:Timeframes: ['1min', '5min', '15min', '1hour']
+✅ FeatureEngineer initialized
+INFO:src.features.engineering:Starting feature engineering for 5000 records
+INFO:src.features.engineering:Date range: 2025-06-03 19:37:00+02:00 to 2025-06-11 07:00:00+02:00
+INFO:src.features.engineering:Generating base 1-minute features...
+INFO:src.features.engineering:Generating multi-timeframe features...
+INFO:src.features.engineering:Processing 5min timeframe...
+INFO:src.features.engineering:Processing 15min timeframe...
+INFO:src.features.engineering:Processing 1hour timeframe...
+INFO:src.features.engineering:Generating DAX-specific features...
+INFO:src.features.engineering:Generating European session features...
+INFO:src.features.engineering:Features with NaN values:
+INFO:src.features.engineering:  Returns: 1 (0.0%)
+INFO:src.features.engineering:  Log_Returns: 1 (0.0%)
+INFO:src.features.engineering:  RSI_14: 13 (0.3%)
+INFO:src.features.engineering:  Stoch_K_14: 13 (0.3%)
+INFO:src.features.engineering:  Stoch_D_3: 15 (0.3%)
+INFO:src.features.engineering:  CCI_20: 19 (0.4%)
+INFO:src.features.engineering:  Williams_R_14: 13 (0.3%)
+INFO:src.features.engineering:  ATR: 14 (0.3%)
+INFO:src.features.engineering:  DI_Plus: 14 (0.3%)
+INFO:src.features.engineering:  DI_Minus: 14 (0.3%)
+INFO:src.features.engineering:  ADX_14: 27 (0.5%)
+INFO:src.features.engineering:  BB_Upper_20: 19 (0.4%)
+INFO:src.features.engineering:  BB_Lower_20: 19 (0.4%)
+INFO:src.features.engineering:  BB_Middle_20: 19 (0.4%)
+INFO:src.features.engineering:  BB_Width_20: 19 (0.4%)
+INFO:src.features.engineering:  BB_Percent_20: 19 (0.4%)
+INFO:src.features.engineering:  ATR_Normalized: 14 (0.3%)
+INFO:src.features.engineering:  CMF_20: 19 (0.4%)
+INFO:src.features.engineering:  Volume_SMA_20: 19 (0.4%)
+INFO:src.features.engineering:  Volume_Ratio: 19 (0.4%)
+INFO:src.features.engineering:  RSI_5min: 63 (1.3%)
+INFO:src.features.engineering:  EMA_Trend_5_10_5min: 3 (0.1%)
+INFO:src.features.engineering:  EMA_Trend_10_20_5min: 3 (0.1%)
+INFO:src.features.engineering:  ATR_5min: 68 (1.4%)
+INFO:src.features.engineering:  RSI_15min: 153 (3.1%)
+INFO:src.features.engineering:  EMA_Trend_5_10_15min: 8 (0.2%)
+INFO:src.features.engineering:  EMA_Trend_10_20_15min: 8 (0.2%)
+INFO:src.features.engineering:  ATR_15min: 158 (3.2%)
+INFO:src.features.engineering:  RSI_1hour: 531 (10.6%)
+INFO:src.features.engineering:  EMA_Trend_5_10_1hour: 23 (0.5%)
+INFO:src.features.engineering:  EMA_Trend_10_20_1hour: 23 (0.5%)
+INFO:src.features.engineering:  ATR_1hour: 591 (11.8%)
+INFO:src.features.engineering:  Prev_Close: 1 (0.0%)
+INFO:src.features.engineering:  ATR_vs_Hourly_Avg: 14 (0.3%)
+INFO:src.features.engineering:  Vol_Adj_Volatility: 14 (0.3%)
+INFO:src.features.engineering:  EU_Session_Range: 2446 (48.9%)
+INFO:src.features.engineering:  Volatility_5min: 5 (0.1%)
+INFO:src.features.engineering:  Volatility_30min: 30 (0.6%)
+INFO:src.features.engineering:  Opening_Hour_Avg_Move: 278 (5.6%)
+INFO:src.features.engineering:  Opening_Hour_Avg_Volume: 278 (5.6%)
+INFO:src.features.engineering:  Opening_Move_vs_Avg: 4700 (94.0%)
+INFO:src.features.engineering:  Close_Effect_Volume: 4845 (96.9%)
+INFO:src.features.engineering:  Avg_Close_Volume: 4750 (95.0%)
+INFO:src.features.engineering:Feature engineering completed: 86 features generated
+
+🎉 Feature Engineering Successful!
+   Processing time: 0.08 seconds
+   Records processed: 5,000
+   Original columns: 5
+   Total columns: 91
+   New features generated: 86
+
+📊 Sample of generated features:
+   Momentum (11): RSI_14, MACD, MACD_Signal...
+   Trend (25): EMA_5, EMA_10, EMA_Cross_5_10...
+   Volatility (15): ATR, BB_Upper_20, BB_Lower_20...
+   Volume (8): OBV, CMF_20, Volume_SMA_20...
+   DAX-Specific (10): Opening_Gap, Opening_Gap_Normalized, Gap_Direction...
+   Session (14): Is_Market_Open, Hour, Is_Pre_Market...
+
+📈 Data Quality:
+   Feature completeness: 95.5%
+
+🔍 Sample feature values (last row):
+   RSI_14: 36.3636
+   MACD: -6.0751
+   ATR: 4.0000
+   EMA_Cross_5_10: -3.1479
+   Volume_Ratio: 1.9512
+
+✅ Feature engineering test completed successfully!
+🚀 Ready for strategy development with 86 features!
+(venv) 
+HARDPC@DESKTOP-5F8NBD1 MINGW64 ~/Desktop/AL/projekty/dax_trading_system (main)
+$

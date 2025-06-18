@@ -547,10 +547,9 @@ class FeatureEngineer:
                 daily_avg_move = opening_data.groupby(opening_data.index.date)['Returns'].mean()
                 daily_avg_volume = opening_data.groupby(opening_data.index.date)['Volume'].mean()
                 
-                # Map back to full DataFrame using pandas Series
-                date_series = pd.Series(df.index.date, index=df.index)
-                df['Opening_Hour_Avg_Move'] = date_series.map(daily_avg_move)
-                df['Opening_Hour_Avg_Volume'] = date_series.map(daily_avg_volume)
+                # Map back to full DataFrame
+                df['Opening_Hour_Avg_Move'] = df.index.date.map(daily_avg_move)
+                df['Opening_Hour_Avg_Volume'] = df.index.date.map(daily_avg_volume)
                 
                 # Current vs average opening patterns
                 df['Opening_Move_vs_Avg'] = np.where(

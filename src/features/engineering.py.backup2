@@ -57,10 +57,10 @@ class FeatureEngineer:
         
         # Timeframes for multi-timeframe analysis
         self.timeframes = {
-            '1min': '1min',
-            '5min': '5min', 
-            '15min': '15min',
-            '1hour': '1h'
+            '1min': '1T',
+            '5min': '5T', 
+            '15min': '15T',
+            '1hour': '1H'
         }
         
         # EMA pairs for crossover analysis
@@ -540,29 +540,16 @@ class FeatureEngineer:
         opening_hour_mask = (df.index.hour == 9)
         
         if opening_hour_mask.any():
-            # Average opening hour movements - fixed approach
-            opening_data = df[opening_hour_mask].copy()
-            if len(opening_data) > 0:
-                # Calculate daily averages for opening hour
-                daily_avg_move = opening_data.groupby(opening_data.index.date)['Returns'].mean()
-                daily_avg_volume = opening_data.groupby(opening_data.index.date)['Volume'].mean()
-                
-                # Map back to full DataFrame using pandas Series
-                date_series = pd.Series(df.index.date, index=df.index)
-                df['Opening_Hour_Avg_Move'] = date_series.map(daily_avg_move)
-                df['Opening_Hour_Avg_Volume'] = date_series.map(daily_avg_volume)
-                
-                # Current vs average opening patterns
-                df['Opening_Move_vs_Avg'] = np.where(
-                    opening_hour_mask,
-                    df['Returns'] - df['Opening_Hour_Avg_Move'],
-                    np.nan
-                )
-            else:
-                # No opening hour data available
-                df['Opening_Hour_Avg_Move'] = np.nan
-                df['Opening_Hour_Avg_Volume'] = np.nan
-                df['Opening_Move_vs_Avg'] = np.nan
+            # Average opening hour movements
+            df['Opening_Hour_Avg_Move'] = df.groupby(df.index.date)[opening_hour_mask]['Returns'].transform('mean')
+            df['Opening_Hour_Avg_Volume'] = df.groupby(df.index.date)[opening_hour_mask]['Volume'].transform('mean')
+            
+            # Current vs average opening patterns
+            df['Opening_Move_vs_Avg'] = np.where(
+                opening_hour_mask,
+                df['Returns'] - df['Opening_Hour_Avg_Move'],
+                np.nan
+            )
         
         # London-Frankfurt overlap (08:00-16:30 CET)
         london_overlap = (df.index.hour >= 8) & (df.index.hour < 16.5)
