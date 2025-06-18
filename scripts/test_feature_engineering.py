@@ -15,15 +15,54 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 
-# Add src to path
-sys.path.append(str(Path(__file__).parent.parent / "src"))
+#!/usr/bin/env python3
+"""
+Test script for the FeatureEngineer class using real historical data.
+
+This script demonstrates how to use the FeatureEngineer with your actual
+DAX historical data from the historical_data.parquet file.
+
+Usage: python scripts/test_feature_engineering.py
+"""
+
+import sys
+import logging
+import os
+from pathlib import Path
+import pandas as pd
+import numpy as np
+from datetime import datetime
+
+# Add project root to path - FIXED PATH HANDLING
+project_root = Path(__file__).parent.parent.absolute()
+sys.path.insert(0, str(project_root))
+
+# Also add src directory specifically
+src_path = project_root / "src"
+if str(src_path) not in sys.path:
+    sys.path.insert(0, str(src_path))
+
+print(f"🔍 Project root: {project_root}")
+print(f"🔍 Src path: {src_path}")
+print(f"🔍 Current dir: {Path.cwd()}")
 
 # Import the FeatureEngineer
 try:
     from src.features.engineering import FeatureEngineer
-except ImportError:
-    print("❌ Could not import FeatureEngineer. Ensure the module is in src/features/engineering.py")
-    sys.exit(1)
+    print("✅ Successfully imported FeatureEngineer")
+except ImportError as e:
+    print(f"❌ Import error with src path: {e}")
+    try:
+        # Fallback: try direct import from features
+        sys.path.insert(0, str(project_root / "src" / "features"))
+        from engineering import FeatureEngineer
+        print("✅ Successfully imported FeatureEngineer (fallback method)")
+    except ImportError as e2:
+        print(f"❌ Could not import FeatureEngineer with any method")
+        print(f"Primary error: {e}")
+        print(f"Fallback error: {e2}")
+        print(f"Python path: {sys.path[:3]}")
+        sys.exit(1)
 
 # Configure logging
 logging.basicConfig(
