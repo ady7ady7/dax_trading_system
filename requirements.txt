@@ -1,0 +1,43 @@
+# Core Data Processing
+pandas>=2.3.0
+numpy>=2.3.0
+scipy>=1.15.3
+
+# Machine Learning
+scikit-learn>=1.7.0
+tensorflow>=2.19.0
+# pytorch>=2.0.0  # Uncomment if using PyTorch instead
+
+# Time Series & Statistics
+statsmodels>=0.14.4
+pytz>=2025.2
+
+# Visualization
+matplotlib>=3.10.3
+seaborn>=0.13.2
+plotly>=6.1.2
+
+# Performance & Parallel Processing
+joblib>=1.5.1
+numba>=0.61.2
+
+# Technical Analysis
+TA-Lib>=0.6.4  # Note: May require manual installation
+pandas-ta>=0.3.14b
+
+# Configuration Management
+PyYAML>=6.0.2
+
+# Progress Bars & Utilities
+tqdm>=4.67.1
+
+# Logging
+colorlog>=6.7.0
+
+# Testing
+pytest>=8.4.0
+pytest-cov>=4.1.0
+
+# Development
+black>=23.9.1
+flake8>=6.0.0
