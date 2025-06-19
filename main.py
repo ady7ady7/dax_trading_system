@@ -31,7 +31,7 @@ from src.data.incremental_processor import IncrementalDataProcessor
 
 
 def setup_logging(log_level: str = "INFO") -> None:
-    """Configure logging for the trading system."""
+    """Configure logging for the trading system with Windows encoding fix."""
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
     
@@ -42,10 +42,21 @@ def setup_logging(log_level: str = "INFO") -> None:
         level=getattr(logging, log_level.upper()),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
-            logging.FileHandler(log_file),
+            # File handler with UTF-8 encoding
+            logging.FileHandler(log_file, encoding='utf-8'),
+            # Console handler with error handling for Windows
             logging.StreamHandler(sys.stdout)
         ]
     )
+    
+    # Fix console encoding on Windows
+    if sys.platform.startswith('win'):
+        try:
+            # Try to set console to UTF-8 
+            import os
+            os.system('chcp 65001 > nul')
+        except:
+            pass
 
 
 def load_config(config_path: str = "config/config.yaml") -> dict:
@@ -139,7 +150,7 @@ def filter_to_trading_hours(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     removed_count = original_count - filtered_count
     removal_percentage = (removed_count / original_count) * 100
     
-    logger.info(f"✅ Trading hours filtering completed:")
+    logger.info(f"[OK] Trading hours filtering completed:")
     logger.info(f"   Original records: {original_count:,}")
     logger.info(f"   Trading hours records: {filtered_count:,}")
     logger.info(f"   Removed: {removed_count:,} ({removal_percentage:.1f}%)")
@@ -210,7 +221,7 @@ def comprehensive_data_processing(df: pd.DataFrame, config: dict) -> tuple:
         validation_results = validate_ohlcv_data(validation_sample)
         processing_summary['data_quality_score'] = validation_results.data_quality_score
         
-        logger.info(f"✅ Data quality score: {validation_results.data_quality_score:.1f}/100")
+        logger.info(f"[OK] Data quality score: {validation_results.data_quality_score:.1f}/100")
         
         # Step 3: Data Imputation (if needed and gaps are reasonable)
         processed_df = df.copy()
@@ -226,7 +237,7 @@ def comprehensive_data_processing(df: pd.DataFrame, config: dict) -> tuple:
                 processed_df = imputation_result.imputed_df
                 processing_summary['gaps_imputed'] = len(imputable_gaps)
                 
-                logger.info(f"✅ Imputed {len(imputable_gaps)} gaps:")
+                logger.info(f"[OK] Imputed {len(imputable_gaps)} gaps:")
                 logger.info(f"   Minor gaps: {imputation_result.imputation_summary.get('minor_gaps_imputed', 0)}")
                 logger.info(f"   Moderate gaps: {imputation_result.imputation_summary.get('moderate_gaps_imputed', 0)}")
             else:
@@ -249,7 +260,7 @@ def comprehensive_data_processing(df: pd.DataFrame, config: dict) -> tuple:
         processing_summary['processing_time_seconds'] = processing_time
         processing_summary['final_records'] = len(processed_df)
         
-        logger.info(f"✅ Data processing completed in {processing_time:.1f} seconds")
+        logger.info(f"[OK] Data processing completed in {processing_time:.1f} seconds")
         
         # Gap analysis summary
         gap_analysis = {
@@ -399,7 +410,7 @@ def main() -> None:
                 try:
                     # 🧠 SMART DATA PROCESSING DECISION
                     logger.info("="*50)
-                    logger.info("SMART DATA PROCESSING DECISION")
+                    logger.info("[SMART] DATA PROCESSING DECISION")
                     logger.info("="*50)
                     
                     # Initialize smart processor
@@ -410,7 +421,7 @@ def main() -> None:
                     
                     if action == 'reuse' and existing_data is not None:
                         # ✅ USE EXISTING PROCESSED DATA
-                        logger.info("✅ Using existing processed data - skipping heavy processing")
+                        logger.info("[OK] Using existing processed data - skipping heavy processing")
                         df_processed = existing_data
                         
                         # Create minimal processing summary for existing data
@@ -439,7 +450,7 @@ def main() -> None:
                         
                     else:
                         # 🔄 PROCESS DATA FROM SOURCE
-                        logger.info("🔄 Processing data from source...")
+                        logger.info("[PROCESS] Processing data from source...")
                         
                         reason = metadata.get('decision', {}).get('reason', 'Full processing required')
                         print(f"\n🔄 PROCESSING DATA FROM SOURCE")
@@ -451,7 +462,7 @@ def main() -> None:
                         logger.info("="*50)
                         
                         df_raw = load_and_convert_data(test_file)
-                        logger.info(f"✅ Raw data loaded: {len(df_raw):,} records")
+                        logger.info(f"[OK] Raw data loaded: {len(df_raw):,} records")
                         logger.info(f"   Date range: {df_raw.index.min()} to {df_raw.index.max()}")
                         
                         # Step 2: Filter to trading hours
