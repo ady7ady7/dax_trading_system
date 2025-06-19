@@ -839,8 +839,8 @@ def _calculate_atr_for_validation(df: pd.DataFrame, period: int) -> pd.Series:
         atr = true_range.rolling(window=actual_period, min_periods=1).mean()
         
         # Fill any remaining NaN values
-        atr = atr.fillna(method='bfill')
-        atr = atr.fillna(method='ffill')
+        atr = atr.bfill()
+        atr = atr.ffill()
         atr = atr.fillna(1.0)  # Ultimate fallback
         
         # Ensure no zero or negative ATR values
