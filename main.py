@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 DAX Trend-Following Algorithmic Trading System
-Main execution entry point for the trading system.
+ENHANCED: Main execution with Trading Hours Processing (8:00-17:30 CET)
 
-Author: [Your Name]
+Author: ady7ady7
 Created: 2025
 Python Version: 3.12.2
 """
@@ -11,8 +11,9 @@ Python Version: 3.12.2
 import logging
 import sys
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, time
 import yaml
+import pytz
 
 # Add src to Python path
 sys.path.append(str(Path(__file__).parent / "src"))
@@ -21,16 +22,10 @@ sys.path.append(str(Path(__file__).parent / "src"))
 import pandas as pd
 import numpy as np
 
-# Local imports (will be implemented in subsequent modules)
+# Local imports
 from src.data.data_ingestion import load_and_convert_data, DataIngestionError
 from src.data.gap_detector import GapDetector
 from src.data.etl_pipeline import impute_data, DataImputer, validate_ohlcv_data
-# from src.data.validator import DataValidator
-# from src.features.engineering import FeatureEngineer
-# from src.models.regime import MarketRegimeDetector
-# from src.strategy.signals import SignalGenerator
-# from src.strategy.risk import RiskManager
-# from src.backtesting.engine import BacktestEngine
 
 
 def setup_logging(log_level: str = "INFO") -> None:
@@ -87,167 +82,276 @@ def validate_environment() -> bool:
         return False
 
 
-def save_historical_data(df: pd.DataFrame, output_path: str = "data/processed/historical_data.parquet") -> bool:
+def filter_to_trading_hours(df: pd.DataFrame, config: dict) -> pd.DataFrame:
     """
-    Save processed historical data to parquet format.
+    Filter DataFrame to trading hours only based on config.
     
     Args:
-        df (pd.DataFrame): Processed OHLCV DataFrame with CET timezone index
-        output_path (str): Path to save the parquet file
+        df: DataFrame with timezone-aware datetime index
+        config: Configuration dictionary with trading hours settings
         
     Returns:
-        bool: True if successful, False otherwise
+        DataFrame filtered to trading hours only
     """
     logger = logging.getLogger(__name__)
     
-    try:
-        # Ensure output directory exists
-        output_file = Path(output_path)
-        output_file.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Save to parquet with compression
-        df.to_parquet(
-            output_file,
-            compression='snappy',
-            index=True,  # Include the datetime index
-            engine='pyarrow'
-        )
-        
-        logger.info(f"Historical data saved to {output_path}")
-        logger.info(f"Saved {len(df):,} records from {df.index.min()} to {df.index.max()}")
-        
-        # Verify the saved file
-        file_size_mb = output_file.stat().st_size / (1024 * 1024)
-        logger.info(f"File size: {file_size_mb:.2f} MB")
-        
-        return True
-        
-    except Exception as e:
-        logger.error(f"Error saving historical data: {e}")
-        return False
-
-
-def load_historical_data(file_path: str = "data/processed/historical_data.parquet") -> pd.DataFrame:
-    """
-    Load historical data from parquet file.
+    # Get trading hours from config (with defaults)
+    trading_config = config.get('trading_hours', {})
+    market_open_str = trading_config.get('market_open', '08:00')
+    market_close_str = trading_config.get('market_close', '17:30')
+    timezone_str = trading_config.get('timezone', 'Europe/Berlin')
+    include_weekends = trading_config.get('include_weekends', False)
     
-    Args:
-        file_path (str): Path to the parquet file
-        
-    Returns:
-        pd.DataFrame: Historical OHLCV data or empty DataFrame if file doesn't exist
-    """
-    logger = logging.getLogger(__name__)
+    # Parse time strings
+    market_open = datetime.strptime(market_open_str, '%H:%M').time()
+    market_close = datetime.strptime(market_close_str, '%H:%M').time()
+    target_timezone = pytz.timezone(timezone_str)
     
-    try:
-        if not Path(file_path).exists():
-            logger.info(f"Historical data file {file_path} does not exist")
-            return pd.DataFrame()
-            
-        df = pd.read_parquet(file_path)
-        logger.info(f"Loaded historical data: {len(df):,} records from {df.index.min()} to {df.index.max()}")
-        
-        return df
-        
-    except Exception as e:
-        logger.error(f"Error loading historical data: {e}")
-        return pd.DataFrame()
-
-
-def process_and_validate_data(df: pd.DataFrame) -> tuple[pd.DataFrame, bool]:
-    """
-    Process raw data through validation, gap detection, and imputation pipeline.
+    logger.info(f"Filtering to trading hours: {market_open} - {market_close} {timezone_str}")
     
-    Args:
-        df (pd.DataFrame): Raw OHLCV DataFrame
-        
-    Returns:
-        tuple: (processed_df, success_flag)
-    """
-    logger = logging.getLogger(__name__)
-    
-    try:
-        # Step 1: Comprehensive Data Validation
-        logger.info("Running comprehensive data validation...")
-        
-        # For large datasets, validate on a sample first
-        if len(df) > 100000:
-            logger.info("Large dataset detected, validating sample...")
-            validation_df = df.head(7 * 24 * 60)  # ~1 week
+    # Ensure DataFrame is in correct timezone
+    if df.index.tz != target_timezone:
+        if df.index.tz is None:
+            logger.warning("DataFrame has no timezone, localizing to target timezone")
+            df.index = df.index.tz_localize(target_timezone, ambiguous='infer')
         else:
-            validation_df = df
-            
-        validation_result = validate_ohlcv_data(validation_df)
+            logger.info(f"Converting from {df.index.tz} to {target_timezone}")
+            df.index = df.index.tz_convert(target_timezone)
+    
+    original_count = len(df)
+    
+    # Filter by time of day
+    time_mask = (df.index.time >= market_open) & (df.index.time <= market_close)
+    
+    # Filter by weekdays if specified
+    if not include_weekends:
+        weekday_mask = df.index.weekday < 5  # Monday=0, Sunday=6
+        combined_mask = time_mask & weekday_mask
+    else:
+        combined_mask = time_mask
+    
+    # Apply filter
+    df_filtered = df[combined_mask].copy()
+    
+    filtered_count = len(df_filtered)
+    removed_count = original_count - filtered_count
+    removal_percentage = (removed_count / original_count) * 100
+    
+    logger.info(f"✅ Trading hours filtering completed:")
+    logger.info(f"   Original records: {original_count:,}")
+    logger.info(f"   Trading hours records: {filtered_count:,}")
+    logger.info(f"   Removed: {removed_count:,} ({removal_percentage:.1f}%)")
+    
+    if filtered_count > 0:
+        logger.info(f"   Date range: {df_filtered.index.min()} to {df_filtered.index.max()}")
+    else:
+        logger.warning("No data remains after trading hours filtering!")
+    
+    return df_filtered
+
+
+def comprehensive_data_processing(df: pd.DataFrame, config: dict) -> tuple:
+    """
+    Perform comprehensive data processing including gap detection, validation, and imputation.
+    
+    Args:
+        df: Trading hours filtered DataFrame
+        config: Configuration dictionary
         
-        logger.info(f"Data Quality Score: {validation_result.data_quality_score:.1f}/100")
-        logger.info(f"OHLC Violations: {validation_result.validation_summary.get('ohlc_violations', 0)}")
-        logger.info(f"Price Movement Anomalies: {validation_result.validation_summary.get('impossible_price_movements', 0)}")
+    Returns:
+        tuple: (processed_df, gap_analysis, validation_results, processing_summary)
+    """
+    logger = logging.getLogger(__name__)
+    
+    logger.info("="*60)
+    logger.info("COMPREHENSIVE DATA PROCESSING")
+    logger.info("="*60)
+    
+    processing_summary = {
+        'original_records': len(df),
+        'gaps_detected': 0,
+        'gaps_imputed': 0,
+        'data_quality_score': 0.0,
+        'processing_time_seconds': 0
+    }
+    
+    start_time = datetime.now()
+    
+    try:
+        # Step 1: Gap Detection
+        logger.info("Step 1: Detecting gaps in trading hours data...")
+        gap_detector = GapDetector(timezone=df.index.tz.zone if df.index.tz else "Europe/Berlin")
         
-        # Check if data quality is acceptable
-        if validation_result.data_quality_score < 70:
-            logger.warning(f"Data quality score ({validation_result.data_quality_score}) below threshold (70)")
-            for recommendation in validation_result.recommended_actions[:3]:  # Show top 3
-                logger.warning(f"  Recommendation: {recommendation}")
-        
-        # Step 2: Gap Detection
-        logger.info("Detecting data gaps...")
-        gap_detector = GapDetector()
-        
-        # For large datasets, test on a sample first for gap detection
-        if len(df) > 100000:
-            logger.info("Large dataset detected, running gap detection on sample...")
-            sample_df = df.head(7 * 24 * 60)  # ~1 week of 1-minute data
+        # For large datasets, we'll sample representative periods
+        if len(df) > 1000000:  # > 1M records
+            logger.info("Large dataset detected - sampling for gap detection...")
+            sample_size = 100000
+            sample_df = df.tail(sample_size)  # Use recent data
             gaps = gap_detector.detect_gaps(sample_df)
-            test_df = sample_df
+            logger.info(f"Detected {len(gaps)} gaps in {sample_size:,} record sample")
         else:
             gaps = gap_detector.detect_gaps(df)
-            test_df = df
+            logger.info(f"Detected {len(gaps)} gaps in full dataset")
         
-        # Get quality metrics
-        quality_metrics = gap_detector.get_data_quality_metrics(test_df, gaps)
+        processing_summary['gaps_detected'] = len(gaps)
         
-        logger.info(f"Data Completeness: {quality_metrics.get('data_completeness_pct', 'N/A')}%")
-        logger.info(f"Total Gaps Found: {quality_metrics.get('total_gaps', 0)}")
-        logger.info(f"Critical Data Gaps: {quality_metrics.get('critical_data_gaps', 0)}")
+        # Step 2: Data Validation
+        logger.info("Step 2: Validating data quality...")
         
-        # Step 3: Data Imputation (if needed)
+        # Use sample for validation if dataset is large
+        if len(df) > 100000:
+            validation_sample = df.tail(100000)
+            logger.info(f"Large dataset - validating sample of {len(validation_sample):,} records")
+        else:
+            validation_sample = df
+        
+        validation_results = validate_ohlcv_data(validation_sample)
+        processing_summary['data_quality_score'] = validation_results.data_quality_score
+        
+        logger.info(f"✅ Data quality score: {validation_results.data_quality_score:.1f}/100")
+        
+        # Step 3: Data Imputation (if needed and gaps are reasonable)
         processed_df = df.copy()
         
-        if gaps:
-            logger.info("Running data imputation...")
+        if gaps and len(gaps) <= 100:  # Only impute if reasonable number of gaps
+            logger.info("Step 3: Imputing minor and moderate gaps...")
             
-            # Only impute minor and moderate gaps for safety
-            safe_gaps = [g for g in gaps if g.severity in ['minor', 'moderate']][:10]  # Limit for processing
+            # Filter gaps to only impute minor and moderate ones
+            imputable_gaps = [gap for gap in gaps if gap.severity in ['minor', 'moderate']]
             
-            if safe_gaps:
-                imputation_result = impute_data(test_df.copy(), safe_gaps)
+            if imputable_gaps:
+                imputation_result = impute_data(processed_df, imputable_gaps)
+                processed_df = imputation_result.imputed_df
+                processing_summary['gaps_imputed'] = len(imputable_gaps)
                 
-                logger.info(f"Imputation Summary:")
-                logger.info(f"  Minor gaps imputed: {imputation_result.imputation_summary.get('minor_gaps_imputed', 0)}")
-                logger.info(f"  Moderate gaps imputed: {imputation_result.imputation_summary.get('moderate_gaps_imputed', 0)}")
-                logger.info(f"  Total points imputed: {imputation_result.imputation_summary.get('total_points_imputed', 0)}")
-                
-                if imputation_result.quality_flags:
-                    logger.warning(f"Imputation quality warnings: {len(imputation_result.quality_flags)}")
-                    
-                # For demonstration, we keep the original data
-                # In production, you might want to use the imputed data
-                # processed_df = imputation_result.imputed_df
-                
+                logger.info(f"✅ Imputed {len(imputable_gaps)} gaps:")
+                logger.info(f"   Minor gaps: {imputation_result.imputation_summary.get('minor_gaps_imputed', 0)}")
+                logger.info(f"   Moderate gaps: {imputation_result.imputation_summary.get('moderate_gaps_imputed', 0)}")
+            else:
+                logger.info("No suitable gaps found for imputation")
+        elif len(gaps) > 100:
+            logger.warning(f"Too many gaps ({len(gaps)}) detected - skipping imputation")
+            logger.warning("Consider reviewing data source quality")
         else:
-            logger.info("Perfect data quality - no gaps detected!")
+            logger.info("No gaps detected - no imputation needed")
         
-        return processed_df, True
+        # Step 4: Final validation of processed data
+        logger.info("Step 4: Final validation of processed data...")
+        
+        if len(processed_df) != len(df):
+            logger.info(f"Data size changed: {len(df):,} → {len(processed_df):,} records")
+        
+        # Calculate processing time
+        end_time = datetime.now()
+        processing_time = (end_time - start_time).total_seconds()
+        processing_summary['processing_time_seconds'] = processing_time
+        processing_summary['final_records'] = len(processed_df)
+        
+        logger.info(f"✅ Data processing completed in {processing_time:.1f} seconds")
+        
+        # Gap analysis summary
+        gap_analysis = {
+            'total_gaps': len(gaps),
+            'gap_types': {},
+            'severity_distribution': {}
+        }
+        
+        if gaps:
+            # Analyze gap types and severity
+            gap_types = {}
+            severity_dist = {}
+            
+            for gap in gaps:
+                gap_types[gap.gap_type] = gap_types.get(gap.gap_type, 0) + 1
+                severity_dist[gap.severity] = severity_dist.get(gap.severity, 0) + 1
+            
+            gap_analysis['gap_types'] = gap_types
+            gap_analysis['severity_distribution'] = severity_dist
+            
+            total_gap_minutes = sum(gap.duration_minutes for gap in gaps)
+            gap_analysis['total_missing_minutes'] = total_gap_minutes
+            gap_analysis['gap_impact_percentage'] = (total_gap_minutes / len(df)) * 100 if len(df) > 0 else 0
+        
+        return processed_df, gap_analysis, validation_results, processing_summary
         
     except Exception as e:
-        logger.error(f"Error in data processing pipeline: {e}")
-        return df, False
+        logger.error(f"Error in comprehensive data processing: {e}", exc_info=True)
+        
+        # Return original data with error summary
+        error_summary = processing_summary.copy()
+        error_summary['error'] = str(e)
+        
+        return df, {'error': str(e)}, None, error_summary
+
+
+def print_processing_summary(gap_analysis: dict, validation_results, processing_summary: dict):
+    """Print a comprehensive summary of data processing results."""
+    
+    print("\n" + "="*70)
+    print("📊 TRADING HOURS DATA PROCESSING SUMMARY")
+    print("="*70)
+    
+    # Basic stats
+    print(f"\n📈 DATA OVERVIEW:")
+    print(f"   Original Records: {processing_summary.get('original_records', 0):,}")
+    print(f"   Final Records: {processing_summary.get('final_records', 0):,}")
+    print(f"   Processing Time: {processing_summary.get('processing_time_seconds', 0):.1f} seconds")
+    
+    # Data quality
+    if validation_results:
+        score = validation_results.data_quality_score
+        score_emoji = "🟢" if score >= 90 else "🟡" if score >= 70 else "🔴"
+        print(f"\n{score_emoji} DATA QUALITY:")
+        print(f"   Quality Score: {score:.1f}/100")
+        print(f"   OHLC Violations: {validation_results.validation_summary.get('ohlc_violations', 0)}")
+        print(f"   Price Anomalies: {validation_results.validation_summary.get('impossible_price_movements', 0)}")
+        print(f"   Volume Anomalies: {validation_results.validation_summary.get('volume_anomalies_low', 0) + validation_results.validation_summary.get('volume_anomalies_high', 0)}")
+    
+    # Gap analysis
+    if 'error' not in gap_analysis:
+        print(f"\n🔍 GAP ANALYSIS:")
+        print(f"   Total Gaps: {gap_analysis.get('total_gaps', 0)}")
+        print(f"   Gaps Imputed: {processing_summary.get('gaps_imputed', 0)}")
+        
+        if gap_analysis.get('total_gaps', 0) > 0:
+            print(f"   Gap Impact: {gap_analysis.get('gap_impact_percentage', 0):.3f}% of trading time")
+            
+            # Gap types
+            gap_types = gap_analysis.get('gap_types', {})
+            if gap_types:
+                print(f"   Gap Types:")
+                for gap_type, count in gap_types.items():
+                    print(f"     {gap_type}: {count}")
+            
+            # Severity distribution
+            severity_dist = gap_analysis.get('severity_distribution', {})
+            if severity_dist:
+                print(f"   Severity Distribution:")
+                for severity, count in severity_dist.items():
+                    print(f"     {severity}: {count}")
+    
+    # Status assessment
+    print(f"\n🎯 SYSTEM STATUS:")
+    if validation_results and validation_results.data_quality_score >= 85:
+        print(f"   ✅ DATA READY FOR ALGORITHMIC TRADING")
+        print(f"   ✅ Quality sufficient for feature engineering")
+    elif validation_results and validation_results.data_quality_score >= 70:
+        print(f"   ⚠️ DATA USABLE WITH CAUTION")
+        print(f"   ⚠️ Monitor for quality issues")
+    else:
+        print(f"   ❌ DATA QUALITY CONCERNS")
+        print(f"   ❌ Manual review recommended")
+    
+    print("\n" + "="*70)
 
 
 def main() -> None:
-    """Main execution function for the DAX trading system."""
+    """
+    ENHANCED Main execution function with trading hours processing.
+    """
     print("=" * 60)
     print("DAX Trend-Following Algorithmic Trading System")
+    print("ENHANCED: Trading Hours Processing (8:00-17:30 CET)")
     print("=" * 60)
     
     # Setup logging
@@ -263,136 +367,112 @@ def main() -> None:
         # Load configuration
         config = load_config()
         
+        # Add trading hours to config if not present
+        if 'trading_hours' not in config:
+            config['trading_hours'] = {
+                'market_open': '08:00',
+                'market_close': '17:30', 
+                'timezone': 'Europe/Berlin',
+                'include_weekends': False
+            }
+            logger.info("Added default trading hours to config")
+        
         # Initialize system components
-        logger.info("Initializing trading system components...")
+        logger.info("Initializing enhanced trading system components...")
         
-        # Check if historical data already exists
-        historical_file = "data/processed/historical_data.parquet"
-        existing_data = load_historical_data(historical_file)
+        # Test data ingestion functionality
+        data_config = config.get('data', {})
+        raw_data_path = data_config.get('raw_data_path', 'data/raw')
         
-        if not existing_data.empty:
-            logger.info(f"Existing historical data found: {len(existing_data):,} records")
-            logger.info(f"Date range: {existing_data.index.min()} to {existing_data.index.max()}")
-            
-            print(f"\n✅ Historical Data Already Exists!")
-            print(f"   File: {historical_file}")
-            print(f"   Records: {len(existing_data):,}")
-            print(f"   Date Range: {existing_data.index.min()} to {existing_data.index.max()}")
-            print(f"   Columns: {list(existing_data.columns)}")
-            
-            # Quick validation of existing data
-            validation_sample = existing_data.tail(1000) if len(existing_data) > 1000 else existing_data
-            validation_result = validate_ohlcv_data(validation_sample)
-            print(f"   Data Quality Score: {validation_result.data_quality_score:.1f}/100")
-            
-        else:
-            logger.info("No existing historical data found, processing raw data...")
-            
-            # Test data ingestion functionality
-            data_config = config.get('data', {})
-            raw_data_path = data_config.get('raw_data_path', 'data/raw')
-            
-            # Look for CSV files in the raw data directory
-            raw_data_dir = Path(raw_data_path)
-            if raw_data_dir.exists():
-                csv_files = list(raw_data_dir.glob("*.csv"))
-                if csv_files:
-                    logger.info(f"Found {len(csv_files)} CSV files in {raw_data_path}")
+        # Look for CSV files in the raw data directory
+        raw_data_dir = Path(raw_data_path)
+        if raw_data_dir.exists():
+            csv_files = list(raw_data_dir.glob("*.csv"))
+            if csv_files:
+                logger.info(f"Found {len(csv_files)} CSV files in {raw_data_path}")
+                
+                # Load the first CSV file found
+                test_file = csv_files[0]
+                logger.info(f"Processing file: {test_file.name}")
+                
+                try:
+                    # Step 1: Load and convert data
+                    logger.info("="*50)
+                    logger.info("STEP 1: DATA LOADING & TIMEZONE CONVERSION")
+                    logger.info("="*50)
                     
-                    # Process the first CSV file found
-                    source_file = csv_files[0]
-                    logger.info(f"Processing primary data file: {source_file.name}")
+                    df_raw = load_and_convert_data(test_file)
+                    logger.info(f"✅ Raw data loaded: {len(df_raw):,} records")
+                    logger.info(f"   Date range: {df_raw.index.min()} to {df_raw.index.max()}")
                     
-                    try:
-                        # Load and convert data using our ingestion system
-                        df = load_and_convert_data(source_file)
-                        logger.info(f"Successfully loaded data: {len(df)} rows")
-                        logger.info(f"Date range: {df.index.min()} to {df.index.max()}")
-                        logger.info(f"Columns: {list(df.columns)}")
-                        
-                        print(f"\n✅ Data Ingestion Successful!")
-                        print(f"   File: {source_file.name}")
-                        print(f"   Rows: {len(df):,}")
-                        print(f"   Columns: {list(df.columns)}")
-                        print(f"   Date Range: {df.index.min()} to {df.index.max()}")
-                        
-                        # Process through validation and gap detection pipeline
-                        processed_df, processing_success = process_and_validate_data(df)
-                        
-                        if processing_success:
-                            print(f"\n🔍 Data Processing Pipeline Completed Successfully!")
-                            
-                            # Save to historical data file
-                            save_success = save_historical_data(processed_df, historical_file)
-                            
-                            if save_success:
-                                print(f"\n💾 Historical Data File Created!")
-                                print(f"   Location: {historical_file}")
-                                print(f"   Records: {len(processed_df):,}")
-                                print(f"   File Format: Parquet (compressed)")
-                                
-                                # Verify the saved file
-                                verification_df = load_historical_data(historical_file)
-                                if not verification_df.empty and len(verification_df) == len(processed_df):
-                                    print(f"   ✅ File integrity verified")
-                                else:
-                                    print(f"   ⚠️ File verification failed")
-                            else:
-                                print(f"\n❌ Failed to save historical data file")
-                                
-                        else:
-                            print(f"\n⚠️ Data processing encountered issues")
-                            
-                    except DataIngestionError as e:
-                        logger.error(f"Data ingestion failed: {e}")
-                        print(f"\n❌ Data Ingestion Failed: {e}")
-                    except Exception as e:
-                        logger.error(f"Unexpected error during data processing: {e}")
-                        print(f"\n❌ Unexpected Error: {e}")
-                else:
-                    logger.info(f"No CSV files found in {raw_data_path}")
-                    print(f"\n📁 No CSV files found in {raw_data_path}")
-                    print("   Place your DAX 1-minute OHLCV CSV files there to create historical data.")
+                    # Step 2: Filter to trading hours
+                    logger.info("="*50)
+                    logger.info("STEP 2: TRADING HOURS FILTERING")
+                    logger.info("="*50)
+                    
+                    df_trading = filter_to_trading_hours(df_raw, config)
+                    
+                    if len(df_trading) == 0:
+                        logger.error("No data remains after trading hours filtering!")
+                        print("❌ No trading hours data available")
+                        return
+                    
+                    # Step 3: Comprehensive data processing
+                    logger.info("="*50)
+                    logger.info("STEP 3: COMPREHENSIVE DATA PROCESSING")
+                    logger.info("="*50)
+                    
+                    df_processed, gap_analysis, validation_results, processing_summary = comprehensive_data_processing(df_trading, config)
+                    
+                    # Step 4: Summary and status
+                    print_processing_summary(gap_analysis, validation_results, processing_summary)
+                    
+                    # Store processed data for next components
+                    # TODO: Pass df_processed to feature engineering
+                    
+                    print(f"\n🚀 NEXT STEPS:")
+                    print(f"   ✅ Trading hours data ready: {len(df_processed):,} records")
+                    print(f"   📊 Memory usage: {df_processed.memory_usage(deep=True).sum() / 1024 / 1024:.1f} MB")
+                    print(f"   ⏳ Ready for feature engineering phase")
+                    
+                    # Save processed data for future use
+                    processed_data_path = Path("data/processed")
+                    processed_data_path.mkdir(exist_ok=True)
+                    
+                    output_file = processed_data_path / f"trading_hours_data_{datetime.now().strftime('%Y%m%d')}.csv"
+                    df_processed.to_csv(output_file)
+                    logger.info(f"Processed data saved to: {output_file}")
+                    
+                except DataIngestionError as e:
+                    logger.error(f"Data ingestion failed: {e}")
+                    print(f"\n❌ Data Ingestion Failed: {e}")
+                except Exception as e:
+                    logger.error(f"Unexpected error during processing: {e}", exc_info=True)
+                    print(f"\n❌ Processing Error: {e}")
             else:
-                logger.info(f"Raw data directory {raw_data_path} does not exist, creating it...")
-                raw_data_dir.mkdir(parents=True, exist_ok=True)
-                print(f"\n📁 Created raw data directory: {raw_data_path}")
-                print("   Place your DAX 1-minute OHLCV CSV files there to create historical data.")
+                logger.info(f"No CSV files found in {raw_data_path}")
+                print(f"\n📁 No CSV files found in {raw_data_path}")
+                print("   Place your DAX 1-minute OHLCV CSV files there to begin processing.")
+        else:
+            logger.info(f"Raw data directory {raw_data_path} does not exist, creating it...")
+            raw_data_dir.mkdir(parents=True, exist_ok=True)
+            print(f"\n📁 Created raw data directory: {raw_data_path}")
+            print("   Place your DAX 1-minute OHLCV CSV files there to begin processing.")
         
-        # TODO: Initialize other components as they are implemented
-        # feature_engineer = FeatureEngineer(config.get('features', {}))
-        # regime_detector = MarketRegimeDetector(config.get('regime', {}))
-        # signal_generator = SignalGenerator(config.get('strategy', {}))
-        # risk_manager = RiskManager(config.get('risk', {}))
-        # backtest_engine = BacktestEngine(config.get('backtest', {}))
-        
-        logger.info("System initialized successfully")
-        
-        # Main execution logic will be implemented here
-        logger.info("Starting main execution loop...")
+        logger.info("Enhanced trading system initialization completed")
         
         # System status
-        print("\n🚀 System Status:")
-        print("   ✅ Data Ingestion Module - Ready")
-        print("   ✅ Data Validation Module - Ready")
-        print("   ✅ Gap Detection Module - Ready")
-        print("   ✅ Data Imputation Module - Ready")
-        print("   ✅ Historical Data Management - Ready")
-        print("   ⏳ Feature Engineering - Pending")
+        print("\n🚀 ENHANCED SYSTEM STATUS:")
+        print("   ✅ Data Ingestion & Timezone Conversion - Ready")
+        print("   ✅ Trading Hours Filtering - Ready") 
+        print("   ✅ Gap Detection & Analysis - Ready")
+        print("   ✅ Data Validation & Quality Scoring - Ready")
+        print("   ✅ Data Imputation (Minor/Moderate Gaps) - Ready")
+        print("   ⏳ Feature Engineering - Next Phase")
         print("   ⏳ Market Regime Detection - Pending") 
         print("   ⏳ Signal Generation - Pending")
         print("   ⏳ Risk Management - Pending")
         print("   ⏳ Backtesting Engine - Pending")
-        
-        if Path(historical_file).exists():
-            print(f"\n💾 Historical Data File Available:")
-            print(f"   {historical_file}")
-            print(f"   Ready for feature engineering and strategy development!")
-        else:
-            print(f"\n📝 Next Steps:")
-            print(f"   1. Place DAX CSV file in data/raw/ directory")
-            print(f"   2. Run main.py again to create historical_data.parquet")
-            print(f"   3. Proceed with feature engineering implementation")
         
         logger.info("Trading system execution completed")
         

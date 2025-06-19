@@ -9,6 +9,14 @@ data:
   timezone_source: "America/Chicago"
   timezone_target: "Europe/Berlin"
 
+# Trading Hours Configuration
+trading_hours:
+  market_open: "08:00"           # Market open time (HH:MM format)
+  market_close: "17:30"          # Market close time (HH:MM format)  
+  timezone: "Europe/Berlin"      # Timezone for trading hours
+  include_weekends: false        # Whether to include weekend data
+  # Note: These settings filter data to 8:00-17:30
+
 # Feature Engineering
 features:
   lookback_periods: [5, 10, 20, 50, 100, 200]
