@@ -1,8 +1,5 @@
-WHOLE ETL + FILTERING process seems to work well now
-+ The only thing we need to implement there is TV data download (+ scheduling the updates in a set interval)
+- We've introduced Statistical Validation with 6 tests and 10 sets of parameters (in Quant_Trading-Kids_BIble)
 
-BUT NOW WE CAN FOCUS ON FEATURE ENGINEERING and make sure it works
-
-
-+ Some time later, I'd also like to include another type of filtering, based on number of trading days lookback. But I stick to what we have now, full dataset to begin with.
-
+- In near future we have to achieve 2 things:
+-- add PARAMETERS optimization (emas periods etc) and run the analysis with different parameters
+-- Make SV go through all sets of parameters and return the most meaningful results 

@@ -1,0 +1,59 @@
+==========================================================================================
+📊 STATISTICAL FEATURE VALIDATION REPORT
+   DAX Trend-Following Trading System
+==========================================================================================
+
+🎯 EXECUTIVE SUMMARY:
+   Statistical validation identified 0 features
+   out of 86 engineered features that meet
+   rigorous statistical significance and effect size criteria.
+
+   Selection Rate: 0.0%
+   Processing Time: 20.34 seconds
+
+📈 VALIDATION PIPELINE RESULTS:
+   ├─ Total features tested: 86
+   ├─ Passed initial screening: 41
+   ├─ Had sufficient data: 41
+   ├─ Significant before correction: 27
+   ├─ Significant after correction: 41
+   └─ Met all final criteria: 0
+
+⚙️ VALIDATION PARAMETERS:
+   Significance level (α): 0.01
+   Minimum effect size: 0.3
+   Multiple testing correction: fdr_bh
+   Temporal consistency threshold: 40%
+
+❌ NO FEATURES MEET ALL VALIDATION CRITERIA
+
+   Possible reasons:
+   • Features lack sufficient predictive power
+   • Validation criteria are too stringent
+   • Target variable definition needs refinement
+   • More sophisticated feature engineering required
+
+🎯 RECOMMENDATIONS FOR TRADING STRATEGY:
+   ❌ INSUFFICIENT: Consider alternative approaches
+   • Review feature engineering methodology
+   • Explore different timeframes or market regimes
+   • Consider regime-specific feature validation
+
+🔬 STATISTICAL METHODOLOGY:
+   This validation framework implements multiple hypothesis tests:
+   • Pearson correlation (linear relationships)
+   • Spearman correlation (monotonic relationships)
+   • Independent t-test (group differences)
+   • Mann-Whitney U test (non-parametric differences)
+   • F-statistic from regression
+   • Mutual information (non-linear relationships)
+
+   Multiple testing correction (fdr_bh) controls
+   false discovery rate to ensure statistical rigor.
+
+   Walk-forward validation tests temporal stability across
+   multiple time windows to ensure robustness.
+
+==========================================================================================
+Report generated: 2025-06-19 12:19:57
+==========================================================================================

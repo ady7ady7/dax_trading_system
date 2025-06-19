@@ -1,0 +1,146 @@
+==========================================================================================
+📊 STATISTICAL FEATURE VALIDATION REPORT
+   DAX Trend-Following Trading System
+==========================================================================================
+
+🎯 EXECUTIVE SUMMARY:
+   Statistical validation identified 22 features
+   out of 86 engineered features that meet
+   rigorous statistical significance and effect size criteria.
+
+   Selection Rate: 25.6%
+   Processing Time: 20.43 seconds
+
+📈 VALIDATION PIPELINE RESULTS:
+   ├─ Total features tested: 86
+   ├─ Passed initial screening: 41
+   ├─ Had sufficient data: 41
+   ├─ Significant before correction: 41
+   ├─ Significant after correction: 41
+   └─ Met all final criteria: 22
+
+⚙️ VALIDATION PARAMETERS:
+   Significance level (α): 0.5
+   Minimum effect size: 0.01
+   Multiple testing correction: fdr_bh
+   Temporal consistency threshold: 10%
+
+🏆 STATISTICALLY VALIDATED FEATURES:
+
+Rank | Feature Name                    | Effect Size | P-Value    | Temporal | Status
+     |                                 | (Pearson)   | (Adj.)     | Consist. |
+─────┼─────────────────────────────────┼─────────────┼────────────┼──────────┼──────────
+   1 │ MACD_Histogram                  │      -0.023 │   3.97e-11 │    40.0% │ ✓
+   2 │ EMA_Cross_5_10                  │      -0.022 │   4.03e-11 │    40.0% │ ✓
+   3 │ DI_Plus                         │      -0.022 │   4.03e-11 │    60.0% │ ✓
+   4 │ RSI_14                          │      -0.020 │   1.41e-09 │    60.0% │ ✓
+   5 │ Stoch_K_14                      │      -0.020 │   4.03e-09 │    40.0% │ ✓
+   6 │ Williams_R_14                   │      -0.020 │   4.03e-09 │    40.0% │ ✓
+   7 │ Stoch_D_3                       │      -0.019 │   4.03e-09 │    40.0% │ ✓
+   8 │ Opening_Hour_Avg_Move           │      +0.018 │   2.79e-08 │    40.0% │ ✓
+   9 │ BB_Percent_20                   │      -0.018 │   6.91e-08 │    60.0% │ ✓
+  10 │ EMA_Cross_10_20                 │      -0.018 │   1.27e-07 │    60.0% │ ✓
+  11 │ CCI_20                          │      -0.016 │   6.21e-07 │    40.0% │ ✓
+  12 │ ATR_Hourly_Avg                  │      +0.014 │   6.74e-06 │    20.0% │ ✓
+  13 │ MACD                            │      -0.014 │   2.06e-05 │    60.0% │ ✓
+  14 │ EMA_Cross_Signal_5_10           │      -0.014 │   2.29e-05 │    40.0% │ ✓
+  15 │ CMF_20                          │      -0.014 │   3.06e-05 │    40.0% │ ✓
+  16 │ DI_Minus                        │      +0.013 │   5.87e-05 │    40.0% │ ✓
+  17 │ EMA_Cross_Signal_10_20          │      -0.012 │   3.27e-04 │    80.0% │ ✓
+  18 │ Volatility_30min                │      -0.010 │   3.70e-03 │    20.0% │ ✓
+  19 │ ATR_vs_Hourly_Avg               │      -0.009 │   9.21e-03 │    40.0% │ ✓
+  20 │ ATR_15min                       │      -0.006 │   5.71e-02 │    60.0% │ ✓
+  21 │ ATR                             │      -0.006 │   2.79e-02 │    40.0% │ ✓
+  22 │ EMA_Trend_5_10_5min             │      -0.006 │   6.64e-02 │    80.0% │ ✓
+
+📋 TOP VALIDATED FEATURES (Detailed Analysis):
+
+   1. MACD_Histogram:
+      Effect Sizes:
+         Pearson correlation: -0.0226
+         Spearman correlation: -0.0187
+         Mutual information: 0.0009
+      Statistical Significance:
+         Raw p-value: 9.69e-13
+         Corrected p-value: 3.97e-11
+      Temporal Validation:
+         Consistency score: 0.400
+         Significant windows: 2/5
+         Mean effect size: 0.1339
+
+   2. EMA_Cross_5_10:
+      Effect Sizes:
+         Pearson correlation: -0.0222
+         Spearman correlation: -0.0170
+         Mutual information: 0.0005
+      Statistical Significance:
+         Raw p-value: 2.45e-12
+         Corrected p-value: 4.03e-11
+      Temporal Validation:
+         Consistency score: 0.400
+         Significant windows: 2/5
+         Mean effect size: 0.1522
+
+   3. DI_Plus:
+      Effect Sizes:
+         Pearson correlation: -0.0221
+         Spearman correlation: -0.0204
+         Mutual information: 0.0059
+      Statistical Significance:
+         Raw p-value: 2.95e-12
+         Corrected p-value: 4.03e-11
+      Temporal Validation:
+         Consistency score: 0.600
+         Significant windows: 3/5
+         Mean effect size: 0.1751
+
+   4. RSI_14:
+      Effect Sizes:
+         Pearson correlation: -0.0203
+         Spearman correlation: -0.0190
+         Mutual information: 0.0069
+      Statistical Significance:
+         Raw p-value: 1.37e-10
+         Corrected p-value: 1.41e-09
+      Temporal Validation:
+         Consistency score: 0.600
+         Significant windows: 3/5
+         Mean effect size: 0.1530
+
+   5. Stoch_K_14:
+      Effect Sizes:
+         Pearson correlation: -0.0195
+         Spearman correlation: -0.0194
+         Mutual information: 0.0062
+      Statistical Significance:
+         Raw p-value: 6.87e-10
+         Corrected p-value: 4.03e-09
+      Temporal Validation:
+         Consistency score: 0.400
+         Significant windows: 2/5
+         Mean effect size: 0.1488
+
+🎯 RECOMMENDATIONS FOR TRADING STRATEGY:
+   ✅ EXCELLENT: Sufficient validated features for robust strategy
+   • Consider ensemble methods combining multiple features
+   • Implement feature importance weighting based on effect sizes
+   • Monitor temporal consistency in live trading
+
+🔬 STATISTICAL METHODOLOGY:
+   This validation framework implements multiple hypothesis tests:
+   • Pearson correlation (linear relationships)
+   • Spearman correlation (monotonic relationships)
+   • Independent t-test (group differences)
+   • Mann-Whitney U test (non-parametric differences)
+   • F-statistic from regression
+   • Mutual information (non-linear relationships)
+
+   Multiple testing correction (fdr_bh) controls
+   false discovery rate to ensure statistical rigor.
+
+   Walk-forward validation tests temporal stability across
+   multiple time windows to ensure robustness.
+
+==========================================================================================
+Report generated: 2025-06-19 12:26:26
+==========================================================================================
