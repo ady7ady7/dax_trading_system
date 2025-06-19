@@ -27,9 +27,25 @@ from scipy.stats import (
 )
 from statsmodels.stats.multitest import multipletests
 from statsmodels.tsa.stattools import adfuller, kpss
-from sklearn.metrics import mutual_info_regression, roc_auc_score
+
+# Handle sklearn imports with version compatibility
+try:
+    from sklearn.feature_selection import mutual_info_regression, f_regression, chi2
+except ImportError:
+    try:
+        from sklearn.feature_selection import f_regression, chi2
+        from sklearn.feature_selection import mutual_info_regression
+    except ImportError:
+        # Fallback for older sklearn versions
+        from sklearn.feature_selection import f_regression, chi2
+        mutual_info_regression = None
+
+try:
+    from sklearn.metrics import roc_auc_score
+except ImportError:
+    roc_auc_score = None
+
 from sklearn.preprocessing import StandardScaler
-from sklearn.feature_selection import f_regression, chi2
 
 # Suppress warnings for cleaner output
 warnings.filterwarnings('ignore', category=RuntimeWarning)

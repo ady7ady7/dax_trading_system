@@ -15,8 +15,15 @@ from typing import Dict, Optional, Tuple
 from pathlib import Path
 from datetime import datetime
 
-# Import the statistical validator
-from .statistical_validator import StatisticalFeatureValidator
+# Import statistical validation framework
+# Handle imports with error checking
+try:
+    from .statistical_validator import StatisticalFeatureValidator
+    VALIDATION_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Statistical validation not available: {e}")
+    StatisticalFeatureValidator = None
+    VALIDATION_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +43,9 @@ class ValidationPipeline:
         Args:
             config: System configuration dictionary
         """
+        
+        if not VALIDATION_AVAILABLE:
+            raise ImportError("Statistical validation dependencies not available")
         
         self.config = config or {}
         
@@ -381,10 +391,18 @@ def add_validation_step(features_df: pd.DataFrame,
         Tuple of (validated_df, validation_results)
     """
     
-    pipeline = ValidationPipeline(config)
-    return pipeline.validate_and_filter_features(
-        features_df, target_method, save_report
-    )
+    if not VALIDATION_AVAILABLE:
+        logger.error("Statistical validation dependencies not available")
+        return features_df, {'error': 'Statistical validation dependencies not available'}
+    
+    try:
+        pipeline = ValidationPipeline(config)
+        return pipeline.validate_and_filter_features(
+            features_df, target_method, save_report
+        )
+    except Exception as e:
+        logger.error(f"Validation step failed: {e}")
+        return features_df, {'error': str(e)}
 
 
 def quick_feature_check(features_df: pd.DataFrame,
