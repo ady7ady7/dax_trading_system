@@ -119,7 +119,7 @@ def load_and_convert_data(
         
         # Convert timestamp column to datetime
         logger.info("Converting timestamps...")
-        df[timestamp_col] = pd.to_datetime(df[timestamp_col], dayfirst=True, format='mixed')
+        df[timestamp_col] = pd.to_datetime(df[timestamp_col])
 
         
         # Set timezone to Chicago (source timezone)
