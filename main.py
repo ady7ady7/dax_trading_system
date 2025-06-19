@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 DAX Trend-Following Algorithmic Trading System
-ENHANCED: Main execution with Feature Engineering Integration
+ENHANCED: Main execution with Feature Engineering + Statistical Validation Integration
 
 Author: ady7ady7
 Created: 2025
@@ -83,7 +83,7 @@ def validate_environment() -> bool:
             return False
             
         # Check critical directories exist
-        required_dirs = ["data", "data/raw", "data/processed", "data/features", "config", "logs"]
+        required_dirs = ["data", "data/raw", "data/processed", "data/features", "config", "logs", "reports", "reports/validation"]
         for dir_path in required_dirs:
             Path(dir_path).mkdir(parents=True, exist_ok=True)
             
@@ -474,6 +474,9 @@ def save_processed_data(df: pd.DataFrame, data_type: str, config: dict) -> Path:
     elif data_type == 'features':
         save_dir = Path("data/features") 
         base_filename = f"feature_data_{datetime.now().strftime('%Y%m%d')}"
+    elif data_type == 'validated':
+        save_dir = Path("data/features") 
+        base_filename = f"validated_features_{datetime.now().strftime('%Y%m%d')}"
     else:
         save_dir = Path("data/processed")
         base_filename = f"processed_data_{datetime.now().strftime('%Y%m%d')}"
@@ -627,13 +630,60 @@ def print_feature_engineering_summary(feature_summary: dict):
     print("\n" + "="*70)
 
 
+def print_validation_summary(validation_summary: dict, validation_results: dict):
+    """Print statistical validation summary."""
+    
+    print("\n" + "="*70)
+    print("🔬 STATISTICAL VALIDATION SUMMARY")
+    print("="*70)
+    
+    significant_features = validation_results.get('significant_features', {})
+    
+    print(f"\n📊 VALIDATION OVERVIEW:")
+    print(f"   Features tested: {validation_summary.get('total_features_tested', 0):,}")
+    print(f"   Features validated: {len(significant_features):,}")
+    print(f"   Selection rate: {validation_summary.get('selection_rate', 0):.1%}")
+    print(f"   Processing time: {validation_summary.get('processing_time_seconds', 0):.2f} seconds")
+    
+    print(f"\n🎯 VALIDATION PARAMETERS:")
+    print(f"   Significance level: {validation_summary.get('significance_level', 0)}")
+    print(f"   Minimum effect size: {validation_summary.get('min_effect_size', 0)}")
+    print(f"   Correction method: {validation_summary.get('correction_method', 'N/A')}")
+    print(f"   Temporal consistency: {validation_summary.get('min_temporal_consistency', 0):.0%}")
+    
+    if significant_features:
+        print(f"\n✅ VALIDATION STATUS: FEATURES VALIDATED")
+        print(f"   Ready for strategy development with {len(significant_features)} validated features")
+        
+        # Show top 3 validated features
+        sorted_features = sorted(
+            significant_features.items(),
+            key=lambda x: abs(x[1].get('effect_size_pearson', 0)),
+            reverse=True
+        )
+        
+        print(f"\n🏆 TOP VALIDATED FEATURES:")
+        for i, (feature, stats) in enumerate(sorted_features[:3], 1):
+            effect_size = stats.get('effect_size_pearson', np.nan)
+            p_value = stats.get('p_value_corrected', np.nan)
+            consistency = stats.get('temporal_consistency', np.nan)
+            feature_name = feature[:40] + "..." if len(feature) > 40 else feature
+            print(f"   {i}. {feature_name}")
+            print(f"      Effect size: {effect_size:.3f}, P-value: {p_value:.2e}, Consistency: {consistency:.1%}")
+    else:
+        print(f"\n⚠️ VALIDATION STATUS: NO FEATURES VALIDATED")
+        print(f"   Consider adjusting validation parameters or improving features")
+    
+    print("\n" + "="*70)
+
+
 def main() -> None:
     """
-    ENHANCED Main execution function with complete feature engineering integration.
+    ENHANCED Main execution function with complete feature engineering + statistical validation.
     """
     print("=" * 80)
     print("DAX Trend-Following Algorithmic Trading System")
-    print("ENHANCED: Complete Data Processing + Feature Engineering Pipeline")
+    print("ENHANCED: Complete Data Processing + Feature Engineering + Statistical Validation")
     print("=" * 80)
     
     # Setup logging
@@ -667,8 +717,21 @@ def main() -> None:
             }
             logger.info("Added default feature config")
         
+        if 'validation' not in config:
+            config['validation'] = {
+                'min_window_size': 1000,
+                'significance_level': 0.01,
+                'min_effect_size': 0.3,
+                'correction_method': 'fdr_bh',
+                'min_temporal_consistency': 0.6,
+                'target_method': 'price_direction',
+                'lookforward_periods': 5,
+                'save_reports': True
+            }
+            logger.info("Added default validation config")
+        
         # Initialize system components
-        logger.info("Initializing enhanced trading system with feature engineering...")
+        logger.info("Initializing enhanced trading system with feature engineering + validation...")
         
         # Test data ingestion functionality
         data_config = config.get('data', {})
@@ -837,38 +900,136 @@ def main() -> None:
                             # Save successful features
                             feature_data_path = save_processed_data(df_features, 'features', config)
                     
-                    # Step 5: Comprehensive Summary
+                    # Step 5: Statistical Feature Validation
+                    logger.info("="*60)
+                    logger.info("STEP 5: STATISTICAL FEATURE VALIDATION")
+                    logger.info("="*60)
+                    
+                    validation_summary = {}
+                    df_final = df_features  # Default to features if validation fails
+                    
+                    try:
+                        from src.validation.integration import add_validation_step
+                        
+                        print(f"\n🔬 STATISTICAL FEATURE VALIDATION")
+                        
+                        # Only validate if we have features to validate
+                        if feature_summary.get('new_features', 0) > 0:
+                            validated_df, statistical_validation_results = add_validation_step(
+                                features_df=df_features,
+                                config=config,
+                                target_method=config.get('validation', {}).get('target_method', 'price_direction'),
+                                save_report=config.get('validation', {}).get('save_reports', True)
+                            )
+                            
+                            if 'error' in statistical_validation_results:
+                                logger.warning(f"Validation failed: {statistical_validation_results['error']}")
+                                logger.warning("Continuing with unvalidated features")
+                                df_final = df_features
+                                validation_summary = {'error': statistical_validation_results['error']}
+                                print(f"⚠️ VALIDATION FAILED: {statistical_validation_results['error']}")
+                                print(f"   Continuing with all {feature_summary.get('new_features', 0)} features")
+                            else:
+                                df_final = validated_df
+                                validation_summary = statistical_validation_results['validation_summary']
+                                significant_features = statistical_validation_results['significant_features']
+                                
+                                logger.info(f"[OK] Feature validation completed:")
+                                logger.info(f"   Features tested: {validation_summary['total_features_tested']}")
+                                logger.info(f"   Features validated: {len(significant_features)}")
+                                logger.info(f"   Selection rate: {validation_summary['selection_rate']:.1%}")
+                                
+                                print(f"✅ VALIDATION COMPLETED:")
+                                print(f"   Original features: {len(df_features.columns)}")
+                                print(f"   Validated features: {len(df_final.columns)}")
+                                print(f"   Features removed: {len(df_features.columns) - len(df_final.columns)}")
+                                
+                                if significant_features:
+                                    print(f"   🏆 Top validated features:")
+                                    sorted_features = sorted(
+                                        significant_features.items(),
+                                        key=lambda x: abs(x[1].get('effect_size_pearson', 0)),
+                                        reverse=True
+                                    )
+                                    for i, (feature, stats) in enumerate(sorted_features[:3], 1):
+                                        effect_size = stats.get('effect_size_pearson', np.nan)
+                                        p_value = stats.get('p_value_corrected', np.nan)
+                                        consistency = stats.get('temporal_consistency', np.nan)
+                                        feature_display = feature[:35] + "..." if len(feature) > 35 else feature
+                                        print(f"     {i}. {feature_display}: r={effect_size:.3f}, p={p_value:.2e}, c={consistency:.1%}")
+                                
+                                # Save validated features
+                                validated_data_path = save_processed_data(df_final, 'validated', config)
+                        else:
+                            logger.warning("No features to validate - skipping validation step")
+                            print(f"⚠️ NO FEATURES TO VALIDATE")
+                            print(f"   Feature engineering produced {feature_summary.get('new_features', 0)} features")
+                            validation_summary = {'skipped': 'No features to validate'}
+
+                    except ImportError as e:
+                        logger.warning(f"Validation module not available: {e}")
+                        logger.warning("Continuing without feature validation")
+                        df_final = df_features
+                        validation_summary = {'error': 'Validation module not available'}
+                        print(f"⚠️ VALIDATION MODULE NOT AVAILABLE")
+                        print(f"   Install validation dependencies: pip install scipy statsmodels scikit-learn")
+                        print(f"   Continuing with all {feature_summary.get('new_features', 0)} features")
+                    
+                    # Step 6: Comprehensive Summary
                     print_processing_summary(gap_analysis, validation_results, processing_summary)
                     print_feature_engineering_summary(feature_summary)
                     
-                    # Step 6: System Status & Next Steps
+                    # Print validation summary if available
+                    if validation_summary and 'error' not in validation_summary and 'skipped' not in validation_summary:
+                        print_validation_summary(validation_summary, statistical_validation_results)
+                    
+                    # Step 7: System Status & Next Steps
                     print(f"\n🚀 SYSTEM STATUS & NEXT STEPS:")
                     print(f"   ✅ Data Pipeline: COMPLETE")
                     print(f"   ✅ Clean Data: {len(df_processed):,} trading hours records")
                     print(f"   ✅ Feature Engineering: {feature_summary.get('new_features', 0)} features generated")
+                    
+                    if 'error' not in validation_summary and 'skipped' not in validation_summary:
+                        validated_count = len(statistical_validation_results.get('significant_features', {}))
+                        print(f"   ✅ Statistical Validation: {validated_count} features validated")
+                        print(f"   📊 Final Dataset: {len(df_final.columns)} columns")
+                    else:
+                        print(f"   ⚠️ Statistical Validation: SKIPPED/FAILED")
+                        print(f"   📊 Final Dataset: {len(df_final.columns)} columns (unvalidated)")
+                    
                     print(f"   📊 Feature Completeness: {feature_summary.get('feature_completeness', 0):.1f}%")
-                    print(f"   💾 Total Memory Usage: {df_features.memory_usage(deep=True).sum() / 1024 / 1024:.1f} MB")
+                    print(f"   💾 Total Memory Usage: {df_final.memory_usage(deep=True).sum() / 1024 / 1024:.1f} MB")
                     
                     # Performance metrics
-                    total_processing_time = processing_summary.get('processing_time_seconds', 0) + feature_summary.get('processing_time_seconds', 0)
+                    total_processing_time = (
+                        processing_summary.get('processing_time_seconds', 0) + 
+                        feature_summary.get('processing_time_seconds', 0) +
+                        validation_summary.get('processing_time_seconds', 0)
+                    )
                     print(f"   ⏱️ Total Processing Time: {total_processing_time:.1f} seconds")
                     
                     # Data quality assessment
                     data_quality = validation_results.data_quality_score if validation_results else 85  # Default for reused
                     feature_quality = feature_summary.get('feature_completeness', 0)
                     
-                    if data_quality >= 85 and feature_quality >= 90:
+                    # Include validation quality if available
+                    if 'error' not in validation_summary and 'skipped' not in validation_summary:
+                        validation_quality = validation_summary.get('selection_rate', 0) * 100
+                        overall_quality = (data_quality + feature_quality + validation_quality) / 3
+                        validation_status = f", Validation: {validation_quality:.1f}%"
+                    else:
+                        overall_quality = (data_quality + feature_quality) / 2
+                        validation_status = ""
+                    
+                    if overall_quality >= 85:
                         print(f"   🎯 STATUS: READY FOR ALGORITHMIC TRADING")
-                        print(f"   🟢 Data Quality: {data_quality:.1f}/100")
-                        print(f"   🟢 Feature Quality: {feature_quality:.1f}%")
-                    elif data_quality >= 70 and feature_quality >= 80:
+                        print(f"   🟢 Overall Quality: {overall_quality:.1f}% (Data: {data_quality:.1f}%, Features: {feature_quality:.1f}%{validation_status})")
+                    elif overall_quality >= 70:
                         print(f"   ⚠️ STATUS: USABLE WITH MONITORING")
-                        print(f"   🟡 Data Quality: {data_quality:.1f}/100")
-                        print(f"   🟡 Feature Quality: {feature_quality:.1f}%")
+                        print(f"   🟡 Overall Quality: {overall_quality:.1f}% (Data: {data_quality:.1f}%, Features: {feature_quality:.1f}%{validation_status})")
                     else:
                         print(f"   ❌ STATUS: QUALITY CONCERNS")
-                        print(f"   🔴 Data Quality: {data_quality:.1f}/100")
-                        print(f"   🔴 Feature Quality: {feature_quality:.1f}%")
+                        print(f"   🔴 Overall Quality: {overall_quality:.1f}% (Data: {data_quality:.1f}%, Features: {feature_quality:.1f}%{validation_status})")
                     
                     print(f"\n📋 READY FOR NEXT PHASES:")
                     print(f"   ⏳ Market Regime Detection")
@@ -878,9 +1039,11 @@ def main() -> None:
                     print(f"   ⏳ Backtesting & Validation")
                     
                     # Store key variables for next phases
-                    logger.info("Data pipeline completed successfully")
+                    logger.info("Enhanced data pipeline completed successfully")
                     logger.info(f"Clean data: {len(df_processed):,} records")
                     logger.info(f"Feature data: {len(df_features):,} records with {feature_summary.get('new_features', 0)} features")
+                    if 'error' not in validation_summary and 'skipped' not in validation_summary:
+                        logger.info(f"Validated data: {len(df_final):,} records with {len(statistical_validation_results.get('significant_features', {}))} validated features")
                     
                 except DataIngestionError as e:
                     logger.error(f"Data ingestion failed: {e}")
@@ -910,6 +1073,7 @@ def main() -> None:
         print("   ✅ Data Validation & Quality Scoring - COMPLETE")
         print("   ✅ Data Imputation (Minor/Moderate Gaps) - COMPLETE")
         print("   ✅ Feature Engineering (86+ Features) - COMPLETE")
+        print("   ✅ Statistical Feature Validation - COMPLETE")
         print("   ⏳ Market Regime Detection - NEXT PHASE")
         print("   ⏳ Adaptive Parameter Optimization - PENDING") 
         print("   ⏳ Signal Generation Logic - PENDING")

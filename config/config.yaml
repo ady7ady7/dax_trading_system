@@ -58,3 +58,16 @@ system:
   max_cpu_cores: 8
   use_gpu: true
   random_seed: 42
+
+#Validation settings
+validation:
+  min_window_size: 1000
+  significance_level: 0.01
+  min_effect_size: 0.3
+  correction_method: "fdr_bh"
+  min_temporal_consistency: 0.6
+  target_method: "price_direction"
+  lookforward_periods: 5
+  walk_forward_steps: 5
+  save_reports: true
+  reports_directory: "reports/validation"
