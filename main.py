@@ -395,9 +395,7 @@ def main() -> None:
                 
                 # Load the first CSV file found
                 test_file = csv_files[0]
-                logger.info(f"Processing file: {test_file.name}")
-                
-                try:
+                logger.info(f"Processing file: {test_file.name}")                                     
                 try:
                     # 🧠 SMART DATA PROCESSING DECISION
                     logger.info("="*50)
