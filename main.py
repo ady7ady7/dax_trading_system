@@ -317,11 +317,21 @@ def comprehensive_feature_engineering(df: pd.DataFrame, config: dict) -> tuple:
     start_time = datetime.now()
     
     try:
-        # Initialize feature engineer
+        # Parse market hours from config strings to time objects
+        trading_config = config.get('trading_hours', {})
+        market_open_str = trading_config.get('market_open', '09:00')
+        market_close_str = trading_config.get('market_close', '17:30')
+        timezone_str = trading_config.get('timezone', 'Europe/Berlin')
+        
+        # Convert string time to time objects
+        market_open_time = datetime.strptime(market_open_str, '%H:%M').time()
+        market_close_time = datetime.strptime(market_close_str, '%H:%M').time()
+        
+        # Initialize feature engineer with proper time objects
         feature_engineer = FeatureEngineer(
-            timezone=config.get('trading_hours', {}).get('timezone', 'Europe/Berlin'),
-            market_open=config.get('trading_hours', {}).get('market_open', '09:00'),
-            market_close=config.get('trading_hours', {}).get('market_close', '17:30')
+            timezone=timezone_str,
+            market_open=market_open_time,
+            market_close=market_close_time
         )
         
         logger.info(f"Feature engineering on {len(df):,} records...")
@@ -454,41 +464,53 @@ def categorize_features(feature_cols: list) -> dict:
 
 
 def save_processed_data(df: pd.DataFrame, data_type: str, config: dict) -> Path:
-    """Save processed data to appropriate location."""
+    """Save processed data to appropriate location with better error handling."""
     logger = logging.getLogger(__name__)
     
     # Determine save path based on data type
     if data_type == 'clean':
         save_dir = Path("data/processed")
-        filename = f"clean_trading_data_{datetime.now().strftime('%Y%m%d')}.parquet"
+        base_filename = f"clean_trading_data_{datetime.now().strftime('%Y%m%d')}"
     elif data_type == 'features':
         save_dir = Path("data/features") 
-        filename = f"feature_data_{datetime.now().strftime('%Y%m%d')}.parquet"
+        base_filename = f"feature_data_{datetime.now().strftime('%Y%m%d')}"
     else:
         save_dir = Path("data/processed")
-        filename = f"processed_data_{datetime.now().strftime('%Y%m%d')}.parquet"
+        base_filename = f"processed_data_{datetime.now().strftime('%Y%m%d')}"
     
     save_dir.mkdir(exist_ok=True)
-    save_path = save_dir / filename
+    
+    # Try parquet first (more efficient), then fall back to CSV
+    parquet_path = save_dir / f"{base_filename}.parquet"
+    csv_path = save_dir / f"{base_filename}.csv"
     
     try:
         # Save as parquet for efficiency
-        df.to_parquet(save_path, compression='snappy')
-        logger.info(f"[OK] Saved {data_type} data: {save_path}")
+        df.to_parquet(parquet_path, compression='snappy')
+        logger.info(f"[OK] Saved {data_type} data (Parquet): {parquet_path}")
         logger.info(f"   Records: {len(df):,}")
         logger.info(f"   Columns: {len(df.columns)}")
-        logger.info(f"   File size: {save_path.stat().st_size / 1024 / 1024:.1f} MB")
+        logger.info(f"   File size: {parquet_path.stat().st_size / 1024 / 1024:.1f} MB")
         
-        return save_path
+        return parquet_path
         
     except Exception as e:
-        logger.error(f"Error saving {data_type} data: {e}")
+        logger.warning(f"Failed to save as Parquet: {e}")
+        logger.info("Falling back to CSV format...")
         
-        # Fallback to CSV
-        csv_path = save_path.with_suffix('.csv')
-        df.to_csv(csv_path)
-        logger.info(f"[FALLBACK] Saved as CSV: {csv_path}")
-        return csv_path
+        try:
+            # Fallback to CSV
+            df.to_csv(csv_path)
+            logger.info(f"[FALLBACK] Saved {data_type} data (CSV): {csv_path}")
+            logger.info(f"   Records: {len(df):,}")
+            logger.info(f"   Columns: {len(df.columns)}")
+            logger.info(f"   File size: {csv_path.stat().st_size / 1024 / 1024:.1f} MB")
+            
+            return csv_path
+            
+        except Exception as csv_error:
+            logger.error(f"Failed to save data in any format: {csv_error}")
+            raise csv_error
 
 
 def print_processing_summary(gap_analysis: dict, validation_results, processing_summary: dict):
@@ -793,8 +815,27 @@ def main() -> None:
                         print(f"\n🔧 GENERATING NEW FEATURES")
                         df_features, feature_summary, _ = comprehensive_feature_engineering(df_processed, config)
                         
-                        # Save features
-                        feature_data_path = save_processed_data(df_features, 'features', config)
+                        # Validate feature engineering success
+                        if feature_summary.get('new_features', 0) == 0:
+                            logger.error("Feature engineering failed - no features generated")
+                            print(f"❌ Feature engineering failed - falling back to clean data")
+                            df_features = df_processed
+                            feature_summary = {
+                                'action': 'feature_engineering_failed',
+                                'original_records': len(df_processed),
+                                'processed_records': len(df_processed),
+                                'final_records': len(df_processed),
+                                'original_columns': len(df_processed.columns),
+                                'total_columns': len(df_processed.columns),
+                                'new_features': 0,
+                                'feature_completeness': 0.0,
+                                'processing_time_seconds': 0,
+                                'feature_categories': {},
+                                'error': 'Feature engineering failed'
+                            }
+                        else:
+                            # Save successful features
+                            feature_data_path = save_processed_data(df_features, 'features', config)
                     
                     # Step 5: Comprehensive Summary
                     print_processing_summary(gap_analysis, validation_results, processing_summary)
