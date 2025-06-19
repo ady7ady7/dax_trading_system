@@ -26,6 +26,8 @@ import numpy as np
 from src.data.data_ingestion import load_and_convert_data, DataIngestionError
 from src.data.gap_detector import GapDetector
 from src.data.etl_pipeline import impute_data, DataImputer, validate_ohlcv_data
+from src.data.incremental_processor import IncrementalDataProcessor
+
 
 
 def setup_logging(log_level: str = "INFO") -> None:
@@ -396,35 +398,95 @@ def main() -> None:
                 logger.info(f"Processing file: {test_file.name}")
                 
                 try:
-                    # Step 1: Load and convert data
+                try:
+                    # 🧠 SMART DATA PROCESSING DECISION
                     logger.info("="*50)
-                    logger.info("STEP 1: DATA LOADING & TIMEZONE CONVERSION")
-                    logger.info("="*50)
-                    
-                    df_raw = load_and_convert_data(test_file)
-                    logger.info(f"✅ Raw data loaded: {len(df_raw):,} records")
-                    logger.info(f"   Date range: {df_raw.index.min()} to {df_raw.index.max()}")
-                    
-                    # Step 2: Filter to trading hours
-                    logger.info("="*50)
-                    logger.info("STEP 2: TRADING HOURS FILTERING")
+                    logger.info("SMART DATA PROCESSING DECISION")
                     logger.info("="*50)
                     
-                    df_trading = filter_to_trading_hours(df_raw, config)
+                    # Initialize smart processor
+                    processor = IncrementalDataProcessor(config)
                     
-                    if len(df_trading) == 0:
-                        logger.error("No data remains after trading hours filtering!")
-                        print("❌ No trading hours data available")
-                        return
+                    # Make intelligent processing decision
+                    action, existing_data, metadata = processor.smart_data_processing_decision(test_file)
                     
-                    # Step 3: Comprehensive data processing
-                    logger.info("="*50)
-                    logger.info("STEP 3: COMPREHENSIVE DATA PROCESSING")
-                    logger.info("="*50)
+                    if action == 'reuse' and existing_data is not None:
+                        # ✅ USE EXISTING PROCESSED DATA
+                        logger.info("✅ Using existing processed data - skipping heavy processing")
+                        df_processed = existing_data
+                        
+                        # Create minimal processing summary for existing data
+                        processing_summary = {
+                            'action': 'reused_existing',
+                            'original_records': len(df_processed),
+                            'final_records': len(df_processed),
+                            'processing_time_seconds': 0.1,  # Minimal time for loading
+                            'reuse_reason': metadata.get('last_reuse', {}).get('decision_reason', 'Existing data is current')
+                        }
+                        
+                        # Skip gap analysis and validation for reused data
+                        gap_analysis = {
+                            'reused_data': True, 
+                            'total_gaps': 'Not re-analyzed (using existing processed data)',
+                            'note': 'Gap analysis was performed during original processing'
+                        }
+                        validation_results = None  # Skip validation for reused data
+                        
+                        print(f"\n✅ REUSING EXISTING PROCESSED DATA")
+                        print(f"   📊 Records: {len(df_processed):,}")
+                        print(f"   📅 Date range: {df_processed.index.min().strftime('%Y-%m-%d')} to {df_processed.index.max().strftime('%Y-%m-%d')}")
+                        print(f"   💾 Memory: {df_processed.memory_usage(deep=True).sum() / 1024 / 1024:.1f} MB")
+                        print(f"   ⚡ Processing time saved: ~30-60 seconds")
+                        print(f"   💡 Reason: {processing_summary['reuse_reason']}")
+                        
+                    else:
+                        # 🔄 PROCESS DATA FROM SOURCE
+                        logger.info("🔄 Processing data from source...")
+                        
+                        reason = metadata.get('decision', {}).get('reason', 'Full processing required')
+                        print(f"\n🔄 PROCESSING DATA FROM SOURCE")
+                        print(f"   💡 Reason: {reason}")
+                        
+                        # Step 1: Load and convert data
+                        logger.info("="*50)
+                        logger.info("STEP 1: DATA LOADING & TIMEZONE CONVERSION")
+                        logger.info("="*50)
+                        
+                        df_raw = load_and_convert_data(test_file)
+                        logger.info(f"✅ Raw data loaded: {len(df_raw):,} records")
+                        logger.info(f"   Date range: {df_raw.index.min()} to {df_raw.index.max()}")
+                        
+                        # Step 2: Filter to trading hours
+                        logger.info("="*50)
+                        logger.info("STEP 2: TRADING HOURS FILTERING")
+                        logger.info("="*50)
+                        
+                        df_trading = filter_to_trading_hours(df_raw, config)
+                        
+                        if len(df_trading) == 0:
+                            logger.error("No data remains after trading hours filtering!")
+                            print("❌ No trading hours data available")
+                            return
+                        
+                        # Step 3: Comprehensive data processing
+                        logger.info("="*50)
+                        logger.info("STEP 3: COMPREHENSIVE DATA PROCESSING")
+                        logger.info("="*50)
+                        
+                        df_processed, gap_analysis, validation_results, processing_summary = comprehensive_data_processing(df_trading, config)
+                        
+                        # Save processed data for future use
+                        processed_data_path = Path("data/processed")
+                        processed_data_path.mkdir(exist_ok=True)
+                        
+                        output_file = processed_data_path / f"trading_hours_data_{datetime.now().strftime('%Y%m%d')}.csv"
+                        df_processed.to_csv(output_file)
+                        logger.info(f"Processed data saved to: {output_file}")
+                        
+                        # Update metadata after successful processing
+                        processor.update_metadata_after_processing(test_file, output_file, len(df_processed))
                     
-                    df_processed, gap_analysis, validation_results, processing_summary = comprehensive_data_processing(df_trading, config)
-                    
-                    # Step 4: Summary and status
+                    # Step 4: Summary and status (same for both paths)
                     print_processing_summary(gap_analysis, validation_results, processing_summary)
                     
                     # Store processed data for next components
@@ -434,14 +496,6 @@ def main() -> None:
                     print(f"   ✅ Trading hours data ready: {len(df_processed):,} records")
                     print(f"   📊 Memory usage: {df_processed.memory_usage(deep=True).sum() / 1024 / 1024:.1f} MB")
                     print(f"   ⏳ Ready for feature engineering phase")
-                    
-                    # Save processed data for future use
-                    processed_data_path = Path("data/processed")
-                    processed_data_path.mkdir(exist_ok=True)
-                    
-                    output_file = processed_data_path / f"trading_hours_data_{datetime.now().strftime('%Y%m%d')}.csv"
-                    df_processed.to_csv(output_file)
-                    logger.info(f"Processed data saved to: {output_file}")
                     
                 except DataIngestionError as e:
                     logger.error(f"Data ingestion failed: {e}")
