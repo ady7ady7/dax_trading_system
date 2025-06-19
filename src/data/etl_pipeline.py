@@ -562,7 +562,11 @@ def _detect_impossible_price_movements(
     atr_period: int, 
     threshold: float
 ) -> List[Dict]:
-    """Detect impossible price movements using ATR-normalized analysis."""
+    """
+    FIXED: Detect impossible price movements using ATR-normalized analysis.
+    
+    This fixes the broadcasting error by properly aligning series indices.
+    """
     anomalies = []
     
     try:
@@ -570,38 +574,82 @@ def _detect_impossible_price_movements(
             logger.warning("Insufficient data for price movement analysis")
             return anomalies
             
-        # Calculate ATR
+        # Calculate ATR properly
         atr_series = _calculate_atr_for_validation(df, atr_period)
         
-        # Calculate price changes
-        price_changes = df['Close'].pct_change()
+        # Calculate price changes (returns)
+        price_changes = df['Close'].pct_change().dropna()
         
-        # Calculate ATR-normalized price changes
-        atr_normalized_changes = price_changes.abs() / (atr_series / df['Close'])
+        if len(price_changes) == 0:
+            logger.warning("No valid price changes to analyze")
+            return anomalies
         
-        # Detect outliers using statistical methods
-        # Method 1: Standard deviation threshold
-        mean_normalized = atr_normalized_changes.mean()
-        std_normalized = atr_normalized_changes.std()
+        # FIXED: Properly align series for ATR normalization
+        # Get close prices that correspond to price changes (skip first row)
+        close_prices = df['Close'].iloc[1:].copy()  # Skip first NaN from pct_change
+        atr_values = atr_series.iloc[1:].copy()     # Skip first to match price_changes
         
-        outliers_std = atr_normalized_changes > (mean_normalized + threshold * std_normalized)
+        # Ensure all series have same length and index
+        common_index = price_changes.index.intersection(close_prices.index).intersection(atr_values.index)
         
-        # Method 2: Z-score approach for additional validation
-        z_scores = np.abs(stats.zscore(price_changes.dropna()))
-        outliers_zscore = z_scores > threshold
+        if len(common_index) < 10:  # Need minimum data for meaningful analysis
+            logger.warning(f"Insufficient aligned data for price movement analysis: {len(common_index)} points")
+            return anomalies
         
-        # Combine both methods
-        outlier_indices = df.index[outliers_std | outliers_zscore]
+        # Align all series to common index
+        price_changes_aligned = price_changes.loc[common_index]
+        close_prices_aligned = close_prices.loc[common_index]
+        atr_values_aligned = atr_values.loc[common_index]
+        
+        # Calculate ATR-normalized changes safely
+        # Avoid division by zero
+        atr_normalized_denominator = atr_values_aligned / close_prices_aligned
+        atr_normalized_denominator = atr_normalized_denominator.replace([np.inf, -np.inf, 0], np.nan)
+        
+        atr_normalized_changes = (price_changes_aligned.abs() / atr_normalized_denominator).fillna(0)
+        
+        # Method 1: Statistical outlier detection
+        outliers_mask = pd.Series(False, index=common_index)
+        
+        if len(atr_normalized_changes) > 20:  # Need sufficient data for stats
+            mean_normalized = atr_normalized_changes.mean()
+            std_normalized = atr_normalized_changes.std()
+            
+            if std_normalized > 0 and not np.isnan(std_normalized):
+                threshold_value = mean_normalized + threshold * std_normalized
+                outliers_mask = atr_normalized_changes > threshold_value
+        
+        # Method 2: Absolute percentage threshold (backup method)
+        absolute_outliers = price_changes_aligned.abs() > 0.10  # 10% threshold
+        
+        # Method 3: Z-score method (with proper error handling)
+        zscore_outliers = pd.Series(False, index=common_index)
+        try:
+            if len(price_changes_aligned) > 10:
+                z_scores = np.abs(stats.zscore(price_changes_aligned.fillna(0)))
+                if not np.any(np.isnan(z_scores)) and not np.any(np.isinf(z_scores)):
+                    zscore_outliers = pd.Series(z_scores > threshold, index=common_index)
+        except Exception as e:
+            logger.debug(f"Z-score calculation failed: {e}")
+        
+        # Combine all methods
+        final_outliers = outliers_mask | absolute_outliers | zscore_outliers
+        outlier_timestamps = final_outliers[final_outliers].index
         
         # Create detailed anomaly records
-        for timestamp in outlier_indices:
-            if timestamp in price_changes.index and not pd.isna(price_changes.loc[timestamp]):
-                current_price = df.loc[timestamp, 'Close']
-                previous_timestamp = df.index[df.index < timestamp][-1]
-                previous_price = df.loc[previous_timestamp, 'Close']
+        for timestamp in outlier_timestamps:
+            try:
+                change_pct = price_changes_aligned.loc[timestamp] * 100
+                current_price = close_prices_aligned.loc[timestamp]
+                atr_value = atr_values_aligned.loc[timestamp]
+                atr_normalized = atr_normalized_changes.loc[timestamp]
                 
-                change_pct = price_changes.loc[timestamp] * 100
-                atr_value = atr_series.loc[timestamp] if timestamp in atr_series.index else np.nan
+                # Find previous price for context
+                prev_timestamps = df.index[df.index < timestamp]
+                if len(prev_timestamps) > 0:
+                    previous_price = df.loc[prev_timestamps[-1], 'Close']
+                else:
+                    previous_price = current_price
                 
                 anomalies.append({
                     'timestamp': timestamp,
@@ -612,13 +660,17 @@ def _detect_impossible_price_movements(
                         'previous_price': previous_price,
                         'change_percent': change_pct,
                         'atr_value': atr_value,
-                        'z_score': z_scores[df.index.get_loc(timestamp)] if timestamp in df.index else np.nan
+                        'atr_normalized': atr_normalized
                     },
                     'severity': 'high' if abs(change_pct) > 10 else 'medium'
                 })
                 
+            except Exception as e:
+                logger.error(f"Error processing anomaly at {timestamp}: {e}")
+                continue
+                
     except Exception as e:
-        logger.error(f"Error in price movement detection: {e}")
+        logger.error(f"Error in FIXED price movement detection: {e}")
         
     return anomalies
 
@@ -756,25 +808,50 @@ def _perform_additional_quality_checks(df: pd.DataFrame) -> Dict:
 
 
 def _calculate_atr_for_validation(df: pd.DataFrame, period: int) -> pd.Series:
-    """Calculate ATR for validation purposes."""
+    """
+    FIXED: Calculate ATR for validation purposes with proper error handling.
+    """
     try:
-        if len(df) < period:
-            return pd.Series(df['High'] - df['Low'], index=df.index)
+        if len(df) < 2:
+            logger.warning("Insufficient data for ATR calculation")
+            return pd.Series(1.0, index=df.index)  # Return series of 1s as fallback
             
-        # True Range calculation
+        # True Range calculation with proper error handling
         df_shifted = df.shift(1)
-        tr1 = df['High'] - df['Low']
-        tr2 = abs(df['High'] - df_shifted['Close'])
-        tr3 = abs(df['Low'] - df_shifted['Close'])
         
+        # Calculate the three components of True Range
+        tr1 = (df['High'] - df['Low']).fillna(0)
+        tr2 = (df['High'] - df_shifted['Close']).abs().fillna(0)
+        tr3 = (df['Low'] - df_shifted['Close']).abs().fillna(0)
+        
+        # True Range = max of the three components
         true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        atr = true_range.rolling(window=period).mean()
         
-        # Fill NaN values
-        atr.bfill(inplace=True)
-        atr.fillna(true_range.mean(), inplace=True)
+        # Handle edge cases
+        true_range = true_range.fillna(0)
+        true_range = true_range.replace([np.inf, -np.inf], 0)
+        
+        # Calculate ATR with minimum period handling
+        actual_period = min(period, len(df))
+        if actual_period < 2:
+            actual_period = 2
+            
+        atr = true_range.rolling(window=actual_period, min_periods=1).mean()
+        
+        # Fill any remaining NaN values
+        atr = atr.fillna(method='bfill')
+        atr = atr.fillna(method='ffill')
+        atr = atr.fillna(1.0)  # Ultimate fallback
+        
+        # Ensure no zero or negative ATR values
+        atr = atr.where(atr > 0, 1.0)
         
         return atr
+        
+    except Exception as e:
+        logger.error(f"Error calculating ATR: {e}")
+        # Return a safe fallback series
+        return pd.Series(1.0, index=df.index)
         
     except Exception as e:
         logger.error(f"Error calculating ATR: {e}")

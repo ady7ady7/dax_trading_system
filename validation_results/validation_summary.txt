@@ -1,0 +1,10 @@
+DAX DATASET VALIDATION REPORT
+==================================================
+
+Generated: 2025-06-19 08:12:33
+Original records: 5,477,623
+Trading hours records: 3,511,878
+Data quality score: 99.5/100
+Total gaps: 53
+
+RECOMMENDATIONS:
